@@ -1,0 +1,18 @@
+<html><head><title>Sample export form</title></head><body>
+<h1>Export</h1>
+<form class="export-form" id="export">
+  <div class="field row"><label for="kind">Content type</label>
+    <select id="kind" name="kind"><option value="">Choose</option><option value="posts">Posts</option><option value="pages">Pages</option></select></div>
+  <div class="field row"><label for="status">Status</label>
+    <select id="status" name="status" disabled><option>Any</option></select></div>
+  <div class="field row"><label for="from">Start date</label><input id="from" name="from" type="date"></div>
+  <div class="field row"><label for="email">Email address</label><input id="email" name="email" type="email" placeholder="you@example.com"></div>
+  <button type="submit" class="btn primary" id="go">Download export</button>
+</form>
+<script>
+document.getElementById('kind').addEventListener('change', function(e){
+  var s=document.getElementById('status'); s.disabled=false;
+  s.innerHTML = e.target.value==='posts' ? '<option>Published</option><option>Draft</option>' : '<option>Any</option>';
+});
+</script>
+</body></html>
