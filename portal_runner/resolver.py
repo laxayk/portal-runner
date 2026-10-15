@@ -34,6 +34,7 @@ class Target:
     structure: Optional[str] = None  # css like "form input[type=email]"
     id: Optional[str] = None
     css_class: Optional[str] = None
+    group: bool = False  # several matches are expected (for example OTP digit boxes); take the first
 
 
 @dataclass
@@ -97,7 +98,7 @@ class Resolver:
                     res.attempts.append({"strategy": strategy, "frame": frame.url[:60] or "main", "result": "error:" + exc.__class__.__name__})
                     continue
                 res.attempts.append({"strategy": strategy, "frame": frame.url[:60] or "main", "matches": n, "visible": len(visible)})
-                if len(visible) == 1:
+                if len(visible) == 1 or (target.group and visible):
                     res.winner = strategy
                     self.wins[target.key] = strategy
                     self.history.append(res)

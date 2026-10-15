@@ -62,3 +62,37 @@ class TotpProvider:
             self._last = code
             log.info("second factor code issued for %s (attempt %d)", challenge.portal, challenge.attempt)
             return code
+
+
+class RelayProvider:
+    """Code typed or dropped by a human. Used when no seed is available to the program.
+
+    It reads the code from a file (default .state/code.txt) that the user or another tool writes,
+    or asks on the terminal if stdin is a TTY. The code is single use and the file is deleted after
+    it is read. The code is never logged.
+    """
+
+    def __init__(self, path=".state/code.txt", timeout=120.0, poll=1.0, sleep=asyncio.sleep, tty_input=None):
+        self.path = path
+        self.timeout = timeout
+        self.poll = poll
+        self._sleep = sleep
+        self._tty_input = tty_input
+
+    async def get_code(self, challenge):
+        import os
+        if self._tty_input is not None:
+            return self._tty_input("Enter the %s code for %s: " % (challenge.kind, challenge.portal)).strip()
+        waited = 0.0
+        while waited <= self.timeout:
+            if os.path.exists(self.path):
+                with open(self.path) as fh:
+                    code = fh.read().strip()
+                os.remove(self.path)
+                if code:
+                    log.info("relayed code read for %s (attempt %d)", challenge.portal, challenge.attempt)
+                    return code
+            await self._sleep(self.poll)
+            waited += self.poll
+        from .errors import WrongCodeError
+        raise WrongCodeError("no code was provided in time")

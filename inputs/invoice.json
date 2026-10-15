@@ -1,0 +1,7 @@
+{
+  "customer": "Acme Test Traders",
+  "invoice_date": "15/10/2026",
+  "terms": "Net 30",
+  "item": "Consulting hour",
+  "quantity": 3
+}
