@@ -5,9 +5,9 @@ The target portal is Zoho Invoice (India data centre).
 
 ## Honest status
 
-Verified by tests (`scripts\test.ps1`, 16 tests):
+Verified by tests (`scripts\test.ps1`, 17 tests):
 - resolver, retries and backoff, session store, evidence redaction, manifest, TOTP and relay code providers
-- the resolver on a saved copy of the real Zoho new-invoice page, under 6 HTML mutations (offline)
+- the resolver on saved copies of the real Zoho invoice list, new-invoice form and invoice detail pages (captured from a signed-in browser, personal details removed); the form is also tested under 6 HTML mutations (offline)
 
 NOT done: a live end-to-end run of this runner against the portal. Sign-in reaches the "Enter time-based OTP" step, but no run has
 passed it, so there is no live success output and no real failure bundle yet. `outputs/offline_resolve_example.json` is offline

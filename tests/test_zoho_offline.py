@@ -32,3 +32,20 @@ def test_due_date_cross_check():
     assert due_date_for("15/10/2026", "Net 30") == "14/11/2026"
     assert due_date_for("15/10/2026", "Due on Receipt") == "15/10/2026"
     assert due_date_for("15/10/2026", "Due end of the month") is None
+
+
+def test_nav_and_pdf_menu_on_real_pages(browser_ctx):
+    async def go():
+        out = {}
+        async with browser_ctx() as b:
+            for f, keys in (("zoho_invoice_list", ["nav_invoices"]), ("zoho_invoice_detail", ["pdf_menu"])):
+                page = await b.new_page()
+                await page.set_content((FIX / (f + ".html")).read_text(encoding="utf-8"))
+                r = Resolver()
+                for k in keys:
+                    await r.resolve(page, T[k])
+                out[f] = dict(r.wins)
+                await page.close()
+        return out
+    out = run(go())
+    assert "nav_invoices" in out["zoho_invoice_list"] and "pdf_menu" in out["zoho_invoice_detail"]
