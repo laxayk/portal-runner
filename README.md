@@ -5,7 +5,7 @@ The target portal is Zoho Invoice (India data centre).
 
 ## Honest status
 
-Verified by tests (`scripts\test.ps1`, 18 tests):
+Verified by tests (`scripts\test.ps1`, 19 tests):
 - resolver, retries and backoff, session store, evidence redaction, manifest, TOTP and relay code providers
 - the resolver on saved copies of the real Zoho invoice list, new-invoice form and invoice detail pages (captured from a signed-in browser, personal details removed); the form is also tested under 6 HTML mutations (offline)
 
@@ -22,6 +22,13 @@ Follow the portal's own setup screen to get the key. This repo ships no credenti
 
 ## One command (setup, checks, tests, run)
 
+First get the code and open a terminal in its folder (needs Git and Python 3.9+):
+
+    git clone https://github.com/laxayk/portal-runner
+    cd portal-runner
+
+Without Git, use the repo page's Code > Download ZIP, extract it and open PowerShell in that folder.
+
 Windows PowerShell:
 
     powershell -ExecutionPolicy Bypass -File .\scripts\go.ps1
@@ -36,8 +43,11 @@ Run it again after filling `.env`. It then runs the tests and the portal. Option
 Fill `.env` with your portal email, password, TOTP secret and `ZOHO_ORG_ID`: sign in to Zoho Invoice and copy the number after `/app/` in the address bar.
 `go.sh` was run on Linux against a fresh clone; `go.ps1` has not been run on Windows yet.
 
-Local outputs (`outputs/failure-*/`, PDFs, `manifest.json`) are git-ignored. Failure bundles redact text files, but the screenshot is a raw picture of the page and can show
-account details, so keep bundles private and do not share the screenshot.
+Local outputs (`outputs/failure-*/`, PDFs, `manifest.json`) are git-ignored.
+Failure bundles redact text files. Before the screenshot, the runner also blanks inputs, hides images, and replaces on-page text that matches your login values,
+emails, phone-like numbers, 6-8 digit codes and anything listed in `PORTAL_REDACT` in `.env` (put your name, company name and phone there).
+Tested: an OCR check on a screenshot with canary text. Not covered: names or details that are neither in `PORTAL_REDACT` nor match those patterns, and the downloaded
+PDF, which is never redacted. Treat bundles and PDFs as private and look at a screenshot before sharing it.
 
 ## Answers
 

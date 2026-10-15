@@ -157,3 +157,32 @@ def test_manifest_shape(tmp_path):
     d = json.load(open(tmp_path / "manifest.json"))
     assert d["pages_visited"] == ["https://x.example/a"]
     assert d["captured_files"][0]["bytes"] == 5 and len(d["captured_files"][0]["sha256"]) == 64
+
+
+def test_screenshot_pixels_hide_text_identity(browser_ctx, tmp_path):
+    """OCR the screenshot: a control without masking shows the canaries, the bundle screenshot does not."""
+    import shutil
+    import subprocess
+    import pytest
+    if not shutil.which("tesseract"):
+        pytest.skip("tesseract not installed")
+    from portal_runner.evidence import mask_page_text
+    from portal_runner.redact import Redactor
+    html = ("<body style='font:42px sans-serif'><p>Account kaylacanary@example.com</p><p>Phone 91-8586017706</p>"
+            "<p>Org Zebra Canary Traders</p><p>Invoice INV-000001</p></body>")
+
+    def ocr(png):
+        return subprocess.run(["tesseract", str(png), "-", "--psm", "6"], capture_output=True, text=True).stdout
+
+    async def go():
+        async with browser_ctx() as b:
+            page = await b.new_page(viewport={"width": 1100, "height": 400})
+            await page.set_content(html)
+            await page.screenshot(path=str(tmp_path / "raw.png"))
+            await mask_page_text(page, Redactor(["Zebra Canary Traders"]))
+            await page.screenshot(path=str(tmp_path / "masked.png"))
+    run(go())
+    raw, masked = ocr(tmp_path / "raw.png").lower(), ocr(tmp_path / "masked.png").lower()
+    assert "canary" in raw and "8586" in raw  # OCR works on the control
+    assert "canary" not in masked and "8586" not in masked and "example.com" not in masked
+    assert "inv-000001" in masked.replace(" ", "") or "invoice" in masked

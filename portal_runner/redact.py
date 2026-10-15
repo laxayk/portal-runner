@@ -16,6 +16,9 @@ class Redactor:
         for s in secrets:
             self.add(s)
 
+    def literals(self):
+        return sorted(self._literals, key=len, reverse=True)
+
     def add(self, value):
         if value and len(value) >= 4:
             self._literals.add(value)

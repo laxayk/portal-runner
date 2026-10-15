@@ -3,6 +3,32 @@ import json
 import os
 import time
 
+# Replaces visible text (all frames) before a screenshot: known literals, emails, phone-like numbers, 6-8 digit codes.
+MASK_JS = """(args) => {
+  const lits = args.lits;
+  const pats = [/[A-Za-z0-9._%+\\-]+@[A-Za-z0-9.\\-]+\\.[A-Za-z]{2,}/g, /\\+?\\d[\\d\\s-]{8,}\\d/g, /(?<![\\w.])\\d{6,8}(?![\\w.])/g];
+  const esc = (x) => x.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');
+  const clean = (t) => {
+    for (const l of lits) { t = t.replace(new RegExp(esc(l), 'gi'), '[REDACTED]'); }
+    for (const p of pats) { t = t.replace(p, '[REDACTED]'); }
+    return t;
+  };
+  const w = document.createTreeWalker(document.body || document, NodeFilter.SHOW_TEXT);
+  let n; while ((n = w.nextNode())) { n.nodeValue = clean(n.nodeValue); }
+  document.querySelectorAll('input, textarea').forEach((e) => { try { e.value = ''; e.placeholder = ''; } catch (x) {} });
+  document.querySelectorAll('[title],[aria-label],[alt]').forEach((e) => { for (const a of ['title','aria-label','alt']) { if (e.hasAttribute(a)) e.setAttribute(a, clean(e.getAttribute(a))); } });
+  document.querySelectorAll('img, svg, canvas, video').forEach((e) => { e.style.visibility = 'hidden'; });
+}"""
+
+
+async def mask_page_text(page, redactor):
+    lits = [x for x in redactor.literals() if len(x) >= 4]
+    for frame in page.frames:
+        try:
+            await frame.evaluate(MASK_JS, {"lits": lits})
+        except Exception:  # noqa: BLE001
+            pass
+
 
 async def write_bundle(out_dir, page, stage, error, resolver, console_lines, redactor, extra=None):
     ts = time.strftime("%Y%m%d_%H%M%S")
@@ -32,6 +58,10 @@ async def write_bundle(out_dir, page, stage, error, resolver, console_lines, red
     put("error.txt", "%s: %s" % (error.__class__.__name__, error))
     if extra:
         put("extra.json", json.dumps(extra, indent=2, default=str))
+    try:
+        await mask_page_text(page, redactor)
+    except Exception:  # noqa: BLE001
+        pass
     try:
         # mask every input and anything the adapter marked as identity, so pixels hold no secrets
         await page.screenshot(path=os.path.join(path, "screenshot.png"), full_page=False,
