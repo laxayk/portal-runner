@@ -14,14 +14,11 @@ passed it, so there is no live success output and no real failure bundle yet. `o
 resolver output only, not a portal run. The Zoho form workflow was mapped by hand in a browser, not by this runner.
 The adapter code past the code step is untested live.
 
-## Running it yourself (needs your own authenticator secret)
+## Running it yourself
 
-The graded path needs a TOTP secret the runner can read. Use an account and authenticator that YOU own:
-1. On a portal account of your own, start authenticator-app (TOTP) enrolment. Many portals show a text setup key next to the QR code. If yours does not, this
-   runner cannot use that portal.
-2. Add the same key to your authenticator app, confirm with a code, and put the key in `.env` as `PORTAL_TOTP_SECRET`. Keep `.env` out of git (it is ignored).
-3. Do not reuse someone else's seed and do not paste it into chats or issues.
-The author's own test account has its seed in a password manager that does not export it, so it cannot be used here. This repo ships no credentials.
+You need your own portal account, your own login in `.env`, and a TOTP secret you control (`PORTAL_TOTP_SECRET`).
+The steps for adding an authenticator differ per service and have not been checked for the Zoho adapter yet, so follow the portal's own
+setup screen and use the text setup key it shows, if it shows one. This repo ships no credentials, and no existing account is assumed ready for a local run.
 
 ## Setup (one command, Windows PowerShell)
 
@@ -62,4 +59,4 @@ failed second factor do not retry.
 a site change shows up in tests before a run fails.
 
 ## Data note
-Zoho pages show the account phone and email. Nothing from a live Zoho page is committed unredacted.
+Zoho pages show the account phone and email. Saved pages in this repo have contact details and ids removed.
