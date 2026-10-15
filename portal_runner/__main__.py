@@ -39,7 +39,12 @@ def cmd_run(a):
     cfg = Config(out_dir=a.out, state_path=a.state, headless=not a.headed, channel=os.environ.get("PW_CHANNEL", ""),
                  fail_at=a.fail_at or "")
     portal = ZohoInvoice(os.environ.get("ZOHO_ORG_ID", ""))
-    files = asyncio.run(run(portal, inputs, creds, build_provider(a.code_source, state_dir), cfg))
+    from .errors import StageFailed
+    try:
+        files = asyncio.run(run(portal, inputs, creds, build_provider(a.code_source, state_dir), cfg))
+    except StageFailed as exc:
+        print("FAILED at stage '%s'. The redacted evidence bundle is in %s (see manifest.json)." % (exc.stage, a.out))
+        sys.exit(1)
     print("captured:", ", ".join(files))
 
 

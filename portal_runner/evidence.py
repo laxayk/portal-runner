@@ -5,7 +5,7 @@ import time
 
 
 async def write_bundle(out_dir, page, stage, error, resolver, console_lines, redactor, extra=None):
-    ts = time.strftime("%Y%m%d-%H%M%S")
+    ts = time.strftime("%Y%m%d_%H%M%S")
     path = os.path.join(out_dir, "failure-%s-%s" % (stage, ts))
     os.makedirs(path, exist_ok=True)
     written = []

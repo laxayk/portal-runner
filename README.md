@@ -20,18 +20,21 @@ You need your own portal account, your own login in `.env`, and a TOTP secret yo
 It accepts a plain base32 key (spaces and lowercase are fine) or a full `otpauth://` URI.
 Follow the portal's own setup screen to get the key. This repo ships no credentials.
 
-## Setup (one command, Windows PowerShell)
+## One command (setup, checks, tests, run)
 
-    .\scripts\setup.ps1
+Windows PowerShell:
 
-Copy `.env.example` to `.env` and fill it in. Then:
+    powershell -ExecutionPolicy Bypass -File .\scripts\go.ps1
 
-    .\scripts\run.ps1                       # relay code source: runner asks for the code
-    .\scripts\run.ps1 -CodeSource totp      # needs PORTAL_TOTP_SECRET in .env
-    .\scripts\run.ps1 -FailAt login         # forces a failure and writes an evidence bundle
+Linux or macOS:
 
-Also set `ZOHO_ORG_ID` in `.env`: sign in to Zoho Invoice and copy the number in the address bar after `/app/` (for example `invoice.zoho.in/app/<number>`).
-The default code source for `run.ps1` is `totp`.
+    ./scripts/go.sh
+
+The first run installs everything and creates `.env`, then stops and tells you which names to fill in (it never prints values).
+Run it again after filling `.env`. It then runs the tests and the portal. Options: `-SkipTests` / `--skip-tests`, `-FailAt login` / `--fail-at login`
+(forces a failure to produce an evidence bundle), `-CodeSource` / `--code-source`.
+Fill `.env` with your portal email, password, TOTP secret and `ZOHO_ORG_ID`: sign in to Zoho Invoice and copy the number after `/app/` in the address bar.
+`go.sh` was run on Linux against a fresh clone; `go.ps1` has not been run on Windows yet.
 
 ## Answers
 
