@@ -36,6 +36,9 @@ Run it again after filling `.env`. It then runs the tests and the portal. Option
 Fill `.env` with your portal email, password, TOTP secret and `ZOHO_ORG_ID`: sign in to Zoho Invoice and copy the number after `/app/` in the address bar.
 `go.sh` was run on Linux against a fresh clone; `go.ps1` has not been run on Windows yet.
 
+Local outputs (`outputs/failure-*/`, PDFs, `manifest.json`) are git-ignored. Failure bundles redact text files, but the screenshot is a raw picture of the page and can show
+account details, so keep bundles private and do not share the screenshot.
+
 ## Answers
 
 **Note:** the assignment asks for a code obtained without a human typing it. `RelayProvider` is a convenience for local testing and does not meet that. `TotpProvider` is the compliant provider.

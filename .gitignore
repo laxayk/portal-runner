@@ -5,3 +5,6 @@
 __pycache__/
 .pytest_cache/
 outputs/tmp/
+outputs/failure-*/
+outputs/*.pdf
+outputs/manifest.json
