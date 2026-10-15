@@ -1,0 +1,20 @@
+Traceback (most recent call last):
+  File "/usr/lib/python3.10/runpy.py", line 196, in _run_module_as_main
+    return _run_code(code, main_globals, None,
+  File "/usr/lib/python3.10/runpy.py", line 86, in _run_code
+    exec(code, run_globals)
+  File "/home/sandbox/portal-runner/portal_runner/__main__.py", line 100, in <module>
+    main()
+  File "/home/sandbox/portal-runner/portal_runner/__main__.py", line 96, in main
+    a.fn(a)
+  File "/home/sandbox/portal-runner/portal_runner/__main__.py", line 76, in cmd_resolve_offline
+    print(json.dumps(asyncio.run(go()), indent=2))
+  File "/usr/lib/python3.10/asyncio/runners.py", line 44, in run
+    return loop.run_until_complete(main)
+  File "/usr/lib/python3.10/asyncio/base_events.py", line 649, in run_until_complete
+    return future.result()
+  File "/home/sandbox/portal-runner/portal_runner/__main__.py", line 61, in go
+    b = await pw.chromium.launch(**kw)
+  File "/home/sandbox/venv/lib/python3.10/site-packages/playwright/async_api/_generated.py", line 4177, in launch
+    await self._impl_obj.launch(
+  File "/home/sandbox/venv/lib/python3.10/site-packages/playwright/_impl/_browser_type.py", line 101, in launch

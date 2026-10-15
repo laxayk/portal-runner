@@ -1,0 +1,51 @@
+{
+  "baseline": {
+    "customer": "role_name",
+    "terms": "role_name",
+    "due_date": "role_name",
+    "item": "role_name",
+    "save_draft": "role_name"
+  },
+  "renamed_classes_and_ids": {
+    "customer": "structure",
+    "terms": "nearby_text",
+    "due_date": "role_name",
+    "item": "role_name",
+    "save_draft": "role_name"
+  },
+  "broken_label_links": {
+    "customer": "structure",
+    "terms": "nearby_text",
+    "due_date": "nearby_text",
+    "item": "role_name",
+    "save_draft": "role_name"
+  },
+  "reordered_siblings": {
+    "customer": "role_name",
+    "terms": "role_name",
+    "due_date": "role_name",
+    "item": "role_name",
+    "save_draft": "role_name"
+  },
+  "wrapper_div": {
+    "customer": "role_name",
+    "terms": "role_name",
+    "due_date": "role_name",
+    "item": "role_name",
+    "save_draft": "role_name"
+  },
+  "inside_iframe": {
+    "customer": "role_name",
+    "terms": "role_name",
+    "due_date": "role_name",
+    "item": "role_name",
+    "save_draft": "role_name"
+  },
+  "all_combined": {
+    "customer": "structure",
+    "terms": "nearby_text",
+    "due_date": "role_name",
+    "item": "role_name",
+    "save_draft": "role_name"
+  }
+}
