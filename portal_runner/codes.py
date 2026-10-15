@@ -44,7 +44,12 @@ class TotpProvider:
     """
 
     def __init__(self, secret, interval=30, min_remaining=4.0, clock=time.time, sleep=asyncio.sleep):
-        self._totp = pyotp.TOTP(secret.reveal() if isinstance(secret, SecretStr) else secret, interval=interval)
+        raw = (secret.reveal() if isinstance(secret, SecretStr) else secret).strip()
+        if raw.lower().startswith("otpauth://"):
+            self._totp = pyotp.parse_uri(raw)
+            interval = self._totp.interval
+        else:
+            self._totp = pyotp.TOTP("".join(raw.split()).upper(), interval=interval)
         self.interval = interval
         self.min_remaining = min_remaining
         self._clock = clock

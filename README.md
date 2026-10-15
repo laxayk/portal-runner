@@ -5,7 +5,7 @@ The target portal is Zoho Invoice (India data centre).
 
 ## Honest status
 
-Verified by tests (`scripts\test.ps1`, 17 tests):
+Verified by tests (`scripts\test.ps1`, 18 tests):
 - resolver, retries and backoff, session store, evidence redaction, manifest, TOTP and relay code providers
 - the resolver on saved copies of the real Zoho invoice list, new-invoice form and invoice detail pages (captured from a signed-in browser, personal details removed); the form is also tested under 6 HTML mutations (offline)
 
@@ -17,8 +17,8 @@ The adapter code past the code step is untested live.
 ## Running it yourself
 
 You need your own portal account, your own login in `.env`, and a TOTP secret you control (`PORTAL_TOTP_SECRET`).
-The steps for adding an authenticator differ per service and have not been checked for the Zoho adapter yet, so follow the portal's own
-setup screen and use the text setup key it shows, if it shows one. This repo ships no credentials, and no existing account is assumed ready for a local run.
+It accepts a plain base32 key (spaces and lowercase are fine) or a full `otpauth://` URI.
+Follow the portal's own setup screen to get the key. This repo ships no credentials.
 
 ## Setup (one command, Windows PowerShell)
 
@@ -30,7 +30,8 @@ Copy `.env.example` to `.env` and fill it in. Then:
     .\scripts\run.ps1 -CodeSource totp      # needs PORTAL_TOTP_SECRET in .env
     .\scripts\run.ps1 -FailAt login         # forces a failure and writes an evidence bundle
 
-Also set `ZOHO_ORG_ID` in `.env`.
+Also set `ZOHO_ORG_ID` in `.env`: sign in to Zoho Invoice and copy the number in the address bar after `/app/` (for example `invoice.zoho.in/app/<number>`).
+The default code source for `run.ps1` is `totp`.
 
 ## Answers
 
