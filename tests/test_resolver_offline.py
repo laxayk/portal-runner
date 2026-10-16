@@ -80,8 +80,52 @@ def test_ambiguous_is_not_accepted(browser_ctx):
             page = await b.new_page()
             await page.set_content('<input aria-label="Email address"><input aria-label="Email address">')
             try:
-                await Resolver().resolve(page, t)
+                await Resolver().resolve(page, t, timeout_ms=400)
             except ResolverExhausted as e:
                 return e.attempts
     attempts = run(go())
     assert attempts and attempts[0]["visible"] == 2
+
+
+def test_waits_for_late_render(browser_ctx):
+    """A field served hidden and revealed by page scripts a moment later still resolves."""
+    html = ("<html><body><input id='login_id' name='LOGIN_ID' type='text' style='display:none'>"
+            "<script>setTimeout(function(){document.getElementById('login_id').style.display='block';},400)</script>"
+            "</body></html>")
+    t = Target("login_id", structure="input[name=LOGIN_ID]", id="login_id")
+
+    async def go():
+        async with browser_ctx() as b:
+            page = await b.new_page()
+            await page.set_content(html)
+            r = Resolver()
+            el = await r.resolve(page, t)
+            assert await el.is_visible()
+            res = r.history[-1]
+            await page.close()
+            return res
+    res = run(go())
+    assert res.winner == "structure"
+    assert res.waited_ms > 0  # it did not win on the first snapshot
+
+
+def test_exhaustion_only_after_timeout(browser_ctx):
+    """A field that never shows is reported only after the full wait, with attempts recorded."""
+    t = Target("login_id", structure="input[name=LOGIN_ID]", id="login_id")
+
+    async def go():
+        async with browser_ctx() as b:
+            page = await b.new_page()
+            await page.set_content("<input name='LOGIN_ID' type='text' style='display:none'>")
+            r = Resolver()
+            try:
+                await r.resolve(page, t, timeout_ms=600)
+            except ResolverExhausted as e:
+                res = r.history[-1]
+                await page.close()
+                return e, res
+            raise AssertionError("should have raised")
+    e, res = run(go())
+    assert "login_id" in str(e)
+    assert res.waited_ms >= 600
+    assert any(a.get("visible") == 0 for a in res.attempts)

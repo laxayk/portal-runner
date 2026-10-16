@@ -10,9 +10,16 @@ Order and why:
  3. nearby text              - visible text next to the control; survives id and class churn
  4. structure                - tag and type (for example input[type=email] inside a form)
  5. id / class               - last, because these change most often in redesigns
+
+Live pages do not render every control at domcontentloaded: Zoho's sign-in, for example, serves
+the login input in the HTML but keeps it hidden until its scripts reveal the form a moment later.
+So a resolve is not a single snapshot. The strategies run, and if none wins the whole pass is
+retried until one strategy finds its element or the timeout runs out. Only then is the target
+reported as unresolvable.
 """
 import json
 import logging
+import time
 from dataclasses import dataclass, field, asdict
 from typing import Dict, List, Optional
 
@@ -21,6 +28,9 @@ from .errors import ResolverExhausted
 log = logging.getLogger("portal_runner.resolver")
 
 ORDER = ["role_name", "label", "nearby_text", "structure", "id_class"]
+
+DEFAULT_TIMEOUT_MS = 15000  # a slow page render must never read as "element does not exist"
+POLL_MS = 200
 
 
 @dataclass
@@ -42,6 +52,7 @@ class Resolution:
     target: str
     winner: Optional[str]
     attempts: List[Dict] = field(default_factory=list)
+    waited_ms: int = 0  # how long the page needed before a strategy won
 
 
 class Resolver:
@@ -80,8 +91,8 @@ class Resolver:
             return None
         return None
 
-    async def resolve(self, page, target):
-        res = Resolution(target=target.key, winner=None)
+    async def _try_once(self, page, target, res):
+        """One pass over the strategies. Returns the winning locator or None."""
         for strategy in ORDER:
             for frame in self._frames(page):
                 loc = self._candidates(frame, target, strategy)
@@ -100,12 +111,34 @@ class Resolver:
                 res.attempts.append({"strategy": strategy, "frame": frame.url[:60] or "main", "matches": n, "visible": len(visible)})
                 if len(visible) == 1 or (target.group and visible):
                     res.winner = strategy
-                    self.wins[target.key] = strategy
-                    self.history.append(res)
-                    log.info("resolved %s via %s", target.key, strategy)
                     return loc.nth(visible[0])
-        self.history.append(res)
-        raise ResolverExhausted(target.key, res.attempts)
+        return None
+
+    async def resolve(self, page, target, timeout_ms=DEFAULT_TIMEOUT_MS):
+        """Find the target, giving the page time to finish rendering first.
+
+        A control that is in the HTML but still hidden (late-revealed form, page transition after
+        a click) gets retried until it shows. ResolverExhausted means the target stayed
+        unresolvable for the whole timeout, not that one early snapshot missed it.
+        """
+        start = time.monotonic()
+        deadline = start + timeout_ms / 1000.0
+        while True:
+            res = Resolution(target=target.key, winner=None)
+            loc = await self._try_once(page, target, res)
+            waited = int((time.monotonic() - start) * 1000)
+            if loc is not None:
+                res.waited_ms = waited
+                self.wins[target.key] = res.winner
+                self.history.append(res)
+                log.info("resolved %s via %s%s", target.key, res.winner, (" after %dms" % waited) if waited else "")
+                return loc
+            remaining_ms = int((deadline - time.monotonic()) * 1000)
+            if remaining_ms <= 0:
+                res.waited_ms = waited
+                self.history.append(res)
+                raise ResolverExhausted(target.key, res.attempts)
+            await page.wait_for_timeout(min(POLL_MS, remaining_ms))
 
     def attempts_json(self):
         return json.dumps([asdict(r) for r in self.history], indent=2)

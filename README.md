@@ -5,7 +5,7 @@ The target portal is Zoho Invoice (India data centre).
 
 ## Honest status
 
-Verified by tests (`scripts\test.ps1`, 19 tests):
+Verified by tests (`scripts\test.ps1`, 21 tests):
 - resolver, retries and backoff, session store, evidence redaction, manifest, TOTP and relay code providers
 - the resolver on saved copies of the real Zoho invoice list, new-invoice form and invoice detail pages (captured from a signed-in browser, personal details removed); the form is also tested under 6 HTML mutations (offline)
 
@@ -62,7 +62,9 @@ retried once with a fresh `get_code` call. A second failure is final and writes 
 
 **Locator order and why.** Role+name, then label, nearby text, structure (data attributes), then id/class. Accessible names are the most stable
 across redesigns. Ids and classes change most, so they come last. The winning strategy is logged. On the real Zoho HTML with renamed ids and broken
-label links, the structure and nearby-text fallbacks win.
+label links, the structure and nearby-text fallbacks win. A resolve is not one snapshot: portals serve controls hidden and reveal them once their
+scripts run (Zoho's sign-in does this), so the resolver retries the pass until a strategy wins or a 15s budget runs out. Only a target that stays
+unresolvable for the whole budget is reported missing.
 
 **Quirks handled.** Six separate OTP digit boxes with no ids; custom dropdowns instead of selects; a due date that depends on the payment terms (checked against the terms);
 a PDF produced by a menu action, captured by download and checked for the `%PDF` header.
