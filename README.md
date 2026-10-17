@@ -45,7 +45,7 @@ Linux or macOS:
 
 The first run installs everything and creates `.env`, then stops and tells you which names to fill in (it never prints values).
 Run it again after filling `.env`. It then runs the tests and the portal. Options: `-SkipTests` / `--skip-tests`, `-FailAt login` / `--fail-at login`
-(forces a failure to produce an evidence bundle), `-CodeSource` / `--code-source`.
+(forces a failure to produce an evidence bundle), `-DeadSession` (Windows script only: keeps a backup of the saved session, overwrites its cookie values so the file still parses but the portal rejects it, runs, then prints the login mode of the run; evaluation only, ordinary runs are unchanged), `-CodeSource` / `--code-source`.
 Fill `.env` with your portal email, password, TOTP secret and `ZOHO_ORG_ID`: sign in to Zoho Invoice and copy the number after `/app/` in the address bar.
 `go.sh` was run on Linux against a fresh clone; `go.ps1` has been run on Windows (see Honest status above).
 

@@ -81,6 +81,39 @@ def cmd_resolve_offline(a):
     print(json.dumps(asyncio.run(go()), indent=2))
 
 
+def cmd_kill_session(a):
+    """Evaluation helper: keep a backup of the saved session, then overwrite every cookie value so
+    the file still parses but the portal will reject it. Prints counts only, never values."""
+    import shutil
+    import time
+    if not os.path.exists(a.state):
+        print("No saved session at %s. Run once first so there is one to invalidate." % a.state)
+        sys.exit(1)
+    with open(a.state, "r", encoding="utf-8-sig") as fh:
+        data = json.load(fh)
+    cookies = data.get("cookies") or []
+    backup = "%s.valid-%s.bak" % (a.state, time.strftime("%Y%m%d_%H%M%S"))
+    shutil.copyfile(a.state, backup)
+    for c in cookies:
+        c["value"] = "dead"
+    with open(a.state, "w", encoding="utf-8") as fh:
+        json.dump(data, fh)
+    print("Saved session kept as %s (private, git-ignored). %d cookie values replaced; the file still parses." % (backup, len(cookies)))
+
+
+def cmd_last_run(a):
+    import glob
+    files = sorted(glob.glob(os.path.join(a.out, "manifest-*.json")))
+    if not files:
+        print("No manifest found in %s." % a.out)
+        sys.exit(1)
+    with open(files[-1], "r", encoding="utf-8") as fh:
+        m = json.load(fh)
+    print("Newest manifest: %s" % os.path.basename(files[-1]))
+    print("status=%s login_mode=%s" % (m.get("status"), m.get("login_mode")))
+    print("navigation=%s" % json.dumps(m.get("navigation", {})))
+
+
 def main():
     p = argparse.ArgumentParser(prog="portal_runner")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -97,6 +130,12 @@ def main():
     o.add_argument("--targets", default="customer,invoice_date,terms,due_date,item,quantity,rate,save_draft")
     o.add_argument("--mutate", action="store_true")
     o.set_defaults(fn=cmd_resolve_offline)
+    k = sub.add_parser("kill-session", help="evaluation helper: invalidate the saved session, keeping a backup")
+    k.add_argument("--state", default=".state/session.json")
+    k.set_defaults(fn=cmd_kill_session)
+    l = sub.add_parser("last-run", help="print login mode and navigation of the newest manifest")
+    l.add_argument("--out", default="outputs")
+    l.set_defaults(fn=cmd_last_run)
     a = p.parse_args()
     a.fn(a)
 

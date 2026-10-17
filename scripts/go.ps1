@@ -1,6 +1,6 @@
 # One command: set up (first time only), check .env, run the tests, then run the portal.
-# Usage: powershell -ExecutionPolicy Bypass -File .\scripts\go.ps1 [-SkipTests] [-FailAt login] [-CodeSource totp]
-param([switch]$SkipTests, [string]$FailAt = "", [string]$CodeSource = "totp")
+# Usage: powershell -ExecutionPolicy Bypass -File .\scripts\go.ps1 [-SkipTests] [-DeadSession] [-FailAt login] [-CodeSource totp]
+param([switch]$SkipTests, [switch]$DeadSession, [string]$FailAt = "", [string]$CodeSource = "totp")
 $ErrorActionPreference = "Stop"
 Set-Location (Join-Path $PSScriptRoot "..")
 
@@ -33,8 +33,16 @@ if ($missing.Count -gt 0) { Write-Host ("Fill these in .env, then run again: " +
 
 if (-not $SkipTests) { & $vpy -m pytest -q; if ($LASTEXITCODE -ne 0) { Write-Host "Tests failed."; exit 1 } }
 
+if ($DeadSession) {
+  # Evaluation only: keep a backup of the saved session, break its cookies, then run normally.
+  & $vpy -m portal_runner kill-session --state .state\session.json
+  if ($LASTEXITCODE -ne 0) { exit 1 }
+}
+
 $a = @("-m", "portal_runner", "run", "--inputs", "inputs\invoice.json", "--code-source", $CodeSource)
 if ($FailAt) { $a += @("--fail-at", $FailAt) }
 & $vpy @a
-if ($LASTEXITCODE -ne 0) { Write-Host "Run failed. Look in outputs\ for the evidence bundle."; exit 1 }
+$runCode = $LASTEXITCODE
+if ($DeadSession) { & $vpy -m portal_runner last-run --out outputs }
+if ($runCode -ne 0) { Write-Host "Run failed. Look in outputs\ for the evidence bundle."; exit 1 }
 Write-Host "Done. See outputs\ (manifest.json, captured files)."
