@@ -30,11 +30,12 @@ T = {
     "terms": Target("terms", role="combobox", name="Terms", nearby="Terms", structure="[data-binding-key=payment_terms_label] [role=combobox]"),
     "due_date": Target("due_date", role="textbox", name="Due Date", nearby="Due Date", structure="input.zf-date-picker.editable"),
     "item": Target("item", role="combobox", name="Type or click to select an item", structure="input[aria-label^='Type or click']"),
-    "quantity": Target("quantity", role="textbox", name="Quantity", structure="input[data-integrity$='quantity']"),
-    "rate": Target("rate", role="textbox", name="Rate", structure="input[data-integrity$='rate']"),
+    # Zoho appends an empty second row once an item is picked: two Quantity/Rate boxes are on screen, ours is the first.
+    "quantity": Target("quantity", role="textbox", name="Quantity", structure="input[data-integrity$='quantity']", group=True),
+    "rate": Target("rate", role="textbox", name="Rate", structure="input[data-integrity$='rate']", group=True),
     "save_draft": Target("save_draft", role="button", name="Save as Draft", tag="button", structure="button:has-text('Save as Draft')"),
     "pdf_menu": Target("pdf_menu", role="button", name="PDF/Print", tag="button", structure="button:has-text('PDF/Print')"),
-    "pdf_item": Target("pdf_item", role="button", name="PDF", tag="button", structure="button:has-text('PDF')"),
+    "pdf_item": Target("pdf_item", role="button", name="PDF", exact=True, tag="button", structure="[role=listbox] button:text-is('PDF')"),
 }
 
 DIGITS = re.compile(r"^\d{6}$")
@@ -312,7 +313,7 @@ class ZohoInvoice(Portal):
         await (await resolver.resolve(page, T["save_draft"])).click()
         await page.wait_for_url(re.compile(r"#/invoices/\d+"), timeout=20000)  # page 4: the saved draft
         visit(page.url)
-        await page.get_by_text("DRAFT").first.wait_for(timeout=15000)
+        await page.get_by_text("DRAFT").locator("visible=true").first.wait_for(timeout=15000)  # ribbon reads "Draft"; match is case-insensitive
 
         await (await resolver.resolve(page, T["pdf_menu"])).click()
         async with page.expect_download(timeout=30000) as dl:

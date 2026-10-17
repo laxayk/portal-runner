@@ -44,6 +44,7 @@ class Target:
     structure: Optional[str] = None  # css like "form input[type=email]"
     id: Optional[str] = None
     css_class: Optional[str] = None
+    exact: bool = False  # role+name match must equal the name, not contain it ("PDF" vs "PDF/Print")
     group: bool = False  # several matches are expected (for example OTP digit boxes); take the first
 
 
@@ -70,7 +71,7 @@ class Resolver:
         if strategy == "role_name":
             if not (t.role and t.name):
                 return None
-            return frame.get_by_role(t.role, name=t.name)
+            return frame.get_by_role(t.role, name=t.name, exact=t.exact)
         if strategy == "label":
             return frame.get_by_label(t.label, exact=True) if t.label else None
         if strategy == "nearby_text":
