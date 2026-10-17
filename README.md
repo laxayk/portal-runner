@@ -5,14 +5,20 @@ The target portal is Zoho Invoice (India data centre).
 
 ## Honest status
 
-Verified by tests (`scripts\test.ps1`, 44 tests):
+Verified by tests (`scripts\test.ps1`, 48 tests on Linux; on Windows 1 test skips when tesseract is missing):
 - resolver, retries and backoff, session store, evidence redaction, manifest, TOTP and relay code providers
 - the resolver on saved copies of the real Zoho invoice list, new-invoice form and invoice detail pages (captured from a signed-in browser, personal details removed); the form is also tested under 6 HTML mutations (offline)
 
-NOT done: a live end-to-end run of this runner against the portal. Sign-in reaches the "Enter time-based OTP" step, but no run has
-passed it, so there is no live success output and no real failure bundle yet. `outputs/offline_resolve_example.json` is offline
-resolver output only, not a portal run. The Zoho form workflow was mapped by hand in a browser, not by this runner.
-The adapter code past the code step is untested live.
+Observed live (author's Windows machine, Oct 18 00:06 IST): one end-to-end run with a REUSED saved session. It filled the form (Net 30 moved the due date from 15/10/2026 to 14/11/2026),
+saved a draft invoice, and captured the PDF. The manifest for that run says `login_mode: session_reused`.
+
+NOT yet observed live with this code: a fresh TOTP login run, recovery from a corrupt saved session, a run with changed inputs, and a deliberately failed run's evidence bundle.
+`outputs/offline_resolve_example.json` is offline resolver output only, not a portal run.
+
+**What "pages deep" means here.** Zoho Invoice is a single page app, so its pages are hash routes, not full page loads. A run visits `#/home`, `#/invoices` (the list),
+`#/invoices/new` (the form) and `#/invoices/<id>` (the saved draft, where the PDF menu is). The list is reached by clicking Invoices (with a direct-address fallback when the sidebar
+swallows the click), and the form is opened by going to its address directly, not by clicking "New". The manifest's `pages_visited` records these routes with ids masked.
+Whether that counts as "three pages deep" is the reviewer's definition.
 
 ## Running it yourself
 
@@ -41,7 +47,7 @@ The first run installs everything and creates `.env`, then stops and tells you w
 Run it again after filling `.env`. It then runs the tests and the portal. Options: `-SkipTests` / `--skip-tests`, `-FailAt login` / `--fail-at login`
 (forces a failure to produce an evidence bundle), `-CodeSource` / `--code-source`.
 Fill `.env` with your portal email, password, TOTP secret and `ZOHO_ORG_ID`: sign in to Zoho Invoice and copy the number after `/app/` in the address bar.
-`go.sh` was run on Linux against a fresh clone; `go.ps1` has been run on Windows through login and the tests; the invoice form step was still failing at the last run, so there is no successful run yet.
+`go.sh` was run on Linux against a fresh clone; `go.ps1` has been run on Windows (see Honest status above).
 
 Local outputs (`outputs/failure-*/`, PDFs, `manifest.json`) are git-ignored.
 Failure bundles redact text files. Before the screenshot, the runner also blanks inputs, hides images, and replaces on-page text that matches your login values,
