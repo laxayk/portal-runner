@@ -64,7 +64,7 @@ Linux/macOS: `./scripts/go.sh --skip-tests`, `./scripts/go.sh --skip-tests --fai
 
 **Quirks.** A due date that depends on the payment terms; custom dropdowns; separate OTP digit boxes; a PDF captured as a download from a menu.
 
-**Retries.** Timeouts, network and navigation errors, and not-ready elements retry up to 3 times with exponential backoff. A wrong code retries once. Final, never retried: a second wrong code, a bot or device check, a target the resolver cannot find within its 15 s budget, and bad input.
+**Retries.** Timeouts, network and navigation errors, and not-ready elements retry up to 3 times with exponential backoff. A wrong code retries once. Final, never retried: a second wrong code, a bot or device check, a target the resolver cannot find within its 15 s budget, bad input, and a Save as Draft whose result is not confirmed (a retry could create a second invoice). Once a draft is saved, a retry reopens it and only redoes the PDF step.
 
 **Failure bundle.** `url.txt`, `stage.txt`, `error.txt`, `console.log`, `page.html`, `resolver_attempts.json`, `extra.json` and `screenshot.png`, with credentials, codes and account identifiers redacted. Treat bundles and the downloaded PDF as private; the PDF is not redacted.
 
