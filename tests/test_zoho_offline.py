@@ -38,7 +38,7 @@ def test_nav_and_pdf_menu_on_real_pages(browser_ctx):
     async def go():
         out = {}
         async with browser_ctx() as b:
-            for f, keys in (("zoho_invoice_list", ["nav_invoices"]), ("zoho_invoice_detail", ["pdf_menu"])):
+            for f, keys in (("zoho_invoice_list", ["nav_invoices", "new_invoice"]), ("zoho_invoice_detail", ["pdf_menu"])):
                 page = await b.new_page()
                 await page.set_content((FIX / (f + ".html")).read_text(encoding="utf-8"))
                 r = Resolver()

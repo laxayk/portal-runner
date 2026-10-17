@@ -17,7 +17,7 @@ NOT yet observed live with this code: a fresh TOTP login run, recovery from a co
 
 **What "pages deep" means here.** Zoho Invoice is a single page app, so its pages are hash routes, not full page loads. A run visits `#/home`, `#/invoices` (the list),
 `#/invoices/new` (the form) and `#/invoices/<id>` (the saved draft, where the PDF menu is). The list is reached by clicking Invoices (with a direct-address fallback when the sidebar
-swallows the click), and the form is opened by going to its address directly, not by clicking "New". The manifest's `pages_visited` records these routes with ids masked.
+swallows the click), and the form is opened by clicking "New" on the list, falling back to its address if the click does not reach the form. The manifest's `navigation` field says which way each page was reached, and `pages_visited` records the routes with ids masked.
 Whether that counts as "three pages deep" is the reviewer's definition.
 
 ## Running it yourself

@@ -111,6 +111,7 @@ async def run(portal, inputs, creds, get_code, cfg):
                 await stage("login", lambda: portal.login(page, resolver, get_code, creds))
                 await store.save(context)
             files = await stage("perform", lambda: portal.perform(page, resolver, inputs, cfg.out_dir, manifest.visit))
+            manifest.data["navigation"] = dict(getattr(portal, "nav_notes", {}))
             for f in files:
                 manifest.capture(f)
             manifest.data["status"] = "success"

@@ -26,6 +26,7 @@ T = {
     "next": Target("next", role="button", name="Next", tag="button", structure="button#nextbtn", id="nextbtn"),
     "otp_box": Target("otp_box", structure="input[type=tel]", group=True),
     "nav_invoices": Target("nav_invoices", role="link", name="Invoices", tag="a", structure="a[href*='#/invoices']"),
+    "new_invoice": Target("new_invoice", role="button", name="New", tag="button", exact=True, structure="button.btn-primary"),
     "customer": Target("customer", role="combobox", name="Customer Name", nearby="Customer Name*", tag="input", structure="[data-binding-key=customer_id] [role=combobox]"),
     "invoice_date": Target("invoice_date", role="textbox", name="Invoice Date", nearby="Invoice Date*", structure="input[data-integrity=date]"),
     "terms": Target("terms", role="combobox", name="Terms", nearby="Terms", structure="[data-binding-key=payment_terms_label] [role=combobox]"),
@@ -62,6 +63,7 @@ class ZohoInvoice(Portal):
     def __init__(self, org_id):
         self.org_id = org_id
         self.home = APP % org_id + "#/home"
+        self.nav_notes = {}  # how each page was reached; copied into the manifest
         self.verdict_timeout = 30.0  # seconds to wait for a positive verdict after a code submit
 
     # ---- session -------------------------------------------------------------------------------
@@ -436,8 +438,30 @@ class ZohoInvoice(Portal):
             page.remove_listener("download", on_download)
             page.remove_listener("response", on_response)
 
+    async def _open_new_form(self, page, resolver):
+        """Click "New" on the invoice list (seen live Oct 18: plain button, goes to #/invoices/new).
+        If the click or the resolver fails, open the same route by address. The way taken is kept
+        in self.nav_notes so the manifest states it."""
+        how = "clicked 'New' on the invoice list"
+        try:
+            btn = await resolver.resolve(page, T["new_invoice"], timeout_ms=8000)
+            await btn.click(timeout=5000)
+            ok = await self._url_has(page, "#/invoices/new", 10.0)
+        except Exception as exc:  # noqa: BLE001
+            log.info("New button click failed (%s)", exc.__class__.__name__)
+            ok = False
+        if not ok:
+            how = "opened #/invoices/new by address (New click did not reach the form)"
+            log.info("%s", how)
+            await page.goto(APP % self.org_id + "#/invoices/new", wait_until="domcontentloaded")
+            if not await self._url_has(page, "#/invoices/new", 15.0):
+                raise RetryableError("new invoice form did not open; url is %s" % page.url.split("?")[0])
+        self.nav_notes["new_form"] = how
+        log.info("new invoice form: %s", how)
+
     async def perform(self, page, resolver, inputs, out_dir, visit):
         os.makedirs(out_dir, exist_ok=True)
+        self.nav_notes.clear()
         await page.goto(self.home, wait_until="domcontentloaded")  # page 1
         nav = await resolver.resolve(page, T["nav_invoices"])  # page 2: list
         try:
@@ -457,7 +481,10 @@ class ZohoInvoice(Portal):
             await page.goto(APP % self.org_id + "#/invoices", wait_until="domcontentloaded")
             if not await self._url_has(page, "#/invoices", 15.0):
                 raise RetryableError("invoice list did not open; url is %s" % page.url.split("?")[0])
-        await page.goto(APP % self.org_id + "#/invoices/new", wait_until="domcontentloaded")  # page 3: form
+            self.nav_notes["invoice_list"] = "opened #/invoices by address (menu click did not reach it)"
+        else:
+            self.nav_notes["invoice_list"] = "clicked 'Invoices' in the sidebar"
+        await self._open_new_form(page, resolver)  # page 3: form
         visit(page.url)
         await self._clear_preferences_modal(page)
 
