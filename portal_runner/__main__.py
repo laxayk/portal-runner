@@ -112,6 +112,8 @@ def cmd_last_run(a):
     print("Newest manifest: %s" % os.path.basename(files[-1]))
     print("status=%s login_mode=%s" % (m.get("status"), m.get("login_mode")))
     print("navigation=%s" % json.dumps(m.get("navigation", {})))
+    print("inputs=%s" % json.dumps(m.get("inputs", {})))
+    print("captured=%s" % ", ".join(c.get("file", "") for c in m.get("captured_files", [])))
 
 
 def main():

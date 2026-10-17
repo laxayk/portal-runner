@@ -1,0 +1,7 @@
+{
+  "customer": "Acme Test Traders",
+  "invoice_date": "16/10/2026",
+  "terms": "Due on Receipt",
+  "item": "Consulting hour",
+  "quantity": 5
+}

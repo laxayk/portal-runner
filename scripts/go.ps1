@@ -1,6 +1,6 @@
 # One command: set up (first time only), check .env, run the tests, then run the portal.
-# Usage: powershell -ExecutionPolicy Bypass -File .\scripts\go.ps1 [-SkipTests] [-DeadSession] [-FailAt login] [-CodeSource totp]
-param([switch]$SkipTests, [switch]$DeadSession, [string]$FailAt = "", [string]$CodeSource = "totp")
+# Usage: powershell -ExecutionPolicy Bypass -File .\scripts\go.ps1 [-SkipTests] [-DeadSession] [-Inputs inputs\invoice_changed.json] [-FailAt login] [-CodeSource totp]
+param([switch]$SkipTests, [switch]$DeadSession, [string]$Inputs = "inputs\invoice.json", [string]$FailAt = "", [string]$CodeSource = "totp")
 $ErrorActionPreference = "Stop"
 Set-Location (Join-Path $PSScriptRoot "..")
 
@@ -39,10 +39,10 @@ if ($DeadSession) {
   if ($LASTEXITCODE -ne 0) { exit 1 }
 }
 
-$a = @("-m", "portal_runner", "run", "--inputs", "inputs\invoice.json", "--code-source", $CodeSource)
+$a = @("-m", "portal_runner", "run", "--inputs", $Inputs, "--code-source", $CodeSource)
 if ($FailAt) { $a += @("--fail-at", $FailAt) }
 & $vpy @a
 $runCode = $LASTEXITCODE
-if ($DeadSession) { & $vpy -m portal_runner last-run --out outputs }
+if ($DeadSession -or $Inputs -ne "inputs\invoice.json") { & $vpy -m portal_runner last-run --out outputs }
 if ($runCode -ne 0) { Write-Host "Run failed. Look in outputs\ for the evidence bundle."; exit 1 }
 Write-Host "Done. See outputs\ (manifest.json, captured files)."
