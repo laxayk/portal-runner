@@ -34,7 +34,7 @@ The secret is the setup key Zoho shows when you enrol an authenticator app. It i
 3. Add the same key to your phone's authenticator app too (type it in or scan the QR), enter the code it shows and click **Verify**. Zoho only confirms setup after that.
 4. Save the backup codes Zoho offers.
 
-If the account already has an authenticator, Zoho does not show the key again and the phone app cannot export it, so use a test account you set up this way. If your organisation's admin restricts MFA setup, ask the admin. Keep `.env` out of git (it is in `.gitignore`) and never share the key: anyone with it can generate your codes.
+If the account already has an authenticator and you do not have its setup key, do not reset your existing MFA just for this. Use a dedicated test account, or a new enrolment, where you keep the key, within Zoho's and your organisation's policy (an admin can restrict MFA setup). Keep `.env` out of git (it is in `.gitignore`) and never share the key: anyone with it can generate your codes.
 Zoho's guide: https://help.zoho.com/portal/en/kb/accounts/multi-factor-authentication/articles/mfa-totp
 
 Inputs are in `inputs/invoice.json` (`customer`, `invoice_date` as dd/mm/yyyy, `terms`, `item`, `quantity`). Edit it or pass another file; no code change.
