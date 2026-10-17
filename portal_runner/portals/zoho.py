@@ -214,6 +214,16 @@ class ZohoInvoice(Portal):
 
         await second_factor(self.name, get_code, submit, rejected)
 
+    async def _url_has(self, page, part, timeout):
+        """Poll the address. Unlike wait_for_url this never waits for a page load event, which a
+        single page app route change may not fire."""
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if part in page.url:
+                return True
+            await page.wait_for_timeout(300)
+        return part in page.url
+
     # ---- work ----------------------------------------------------------------------------------
     async def _pick(self, page, box, text):
         """Zoho dropdowns are custom widgets, not <select>. Open, type to filter, click the option."""
@@ -226,8 +236,24 @@ class ZohoInvoice(Portal):
     async def perform(self, page, resolver, inputs, out_dir, visit):
         os.makedirs(out_dir, exist_ok=True)
         await page.goto(self.home, wait_until="domcontentloaded")  # page 1
-        await (await resolver.resolve(page, T["nav_invoices"])).click()  # page 2: list
-        await page.wait_for_url(re.compile(r"#/invoices"), timeout=15000)
+        nav = await resolver.resolve(page, T["nav_invoices"])  # page 2: list
+        try:
+            # Zoho's sidebar wrapper (div.main-nav-lhs) can sit over the link and swallow pointer
+            # events, so a real click may never land. Try briefly, then click through the DOM.
+            await nav.click(timeout=4000)
+        except Exception as exc:  # noqa: BLE001
+            log.info("real click on Invoices blocked (%s); clicking through the DOM", exc.__class__.__name__)
+            try:
+                await nav.dispatch_event("click")
+            except Exception:  # noqa: BLE001
+                pass
+        if not await self._url_has(page, "#/invoices", 12.0):
+            # The click registered nothing (single page app still wiring up its menu): go to the
+            # list by its address instead. The hash route is the same page the menu opens.
+            log.info("menu click did not reach the invoice list (url %s); opening the list directly", page.url.split("#")[0][-40:])
+            await page.goto(APP % self.org_id + "#/invoices", wait_until="domcontentloaded")
+            if not await self._url_has(page, "#/invoices", 15.0):
+                raise RetryableError("invoice list did not open; url is %s" % page.url.split("?")[0])
         await page.goto(APP % self.org_id + "#/invoices/new", wait_until="domcontentloaded")  # page 3: form
         visit(page.url)
 
