@@ -2,7 +2,7 @@
 
 A command-line Playwright bot for Zoho Invoice (India, my own test account). It logs in with an authenticator-app code it computes itself, creates a draft invoice from a JSON file, and saves the invoice PDF. One site covers everything the brief asks for.
 
-Flow: log in (TOTP) -> save the session to `.state/session.json` -> next run reuses it, or logs in again if it is dead -> Home -> Invoices -> New -> fill the form (customer, date, terms, item, quantity; the due date depends on the terms) -> save as draft -> download the PDF -> write `outputs/manifest-<time>.json` (inputs, pages visited, stage timings, captured files). It never sends an invoice.
+Flow: log in (TOTP) -> save the session to `.state/session.json` -> next run reuses it, or logs in again if it is dead -> Home -> Invoices -> New -> fill the form (customer, date, terms, item, quantity; the due date depends on the terms) -> save as draft -> download the PDF -> write `outputs/manifest.json` plus a timestamped copy (inputs, pages visited, stage timings, captured files). It never sends an invoice.
 
 Zoho Invoice is a single page app, so its pages are hash routes (`#/home`, `#/invoices`, `#/invoices/new`, `#/invoices/<id>`).
 
@@ -52,7 +52,7 @@ Linux/macOS: `./scripts/go.sh --skip-tests`, `./scripts/go.sh --skip-tests --fai
 
 **Quirks.** A due date that depends on the payment terms; custom dropdowns; separate OTP digit boxes; a PDF captured as a download from a menu.
 
-**Retries.** Timeouts, locator misses and navigation errors retry with bounded exponential backoff. A wrong code retries once. Bad input JSON and a failed second factor do not.
+**Retries.** Timeouts, network and navigation errors, and not-ready elements retry up to 3 times with exponential backoff. A wrong code retries once. Final, never retried: a second wrong code, a bot or device check, a target the resolver cannot find within its 15 s budget, and bad input.
 
 **Failure bundle.** `url.txt`, `stage.txt`, `error.txt`, `console.log`, `page.html`, `resolver_attempts.json`, `extra.json` and `screenshot.png`, with credentials, codes and account identifiers redacted. Treat bundles and the downloaded PDF as private; the PDF is not redacted.
 
