@@ -257,6 +257,46 @@ class ZohoInvoice(Portal):
         return part in page.url
 
     # ---- work ----------------------------------------------------------------------------------
+    async def _set_date(self, page, box, value, tries=3):
+        """Fill a Zoho date picker and confirm it kept the value. The picker can reset a filled
+        value to today, so the field is read back; the picker popup is closed with Escape."""
+        for attempt in range(tries):
+            if attempt == 0:
+                await box.fill(value)
+            else:
+                await box.click()
+                await page.keyboard.press("Control+A")
+                await page.keyboard.type(value, delay=50)
+            await page.keyboard.press("Tab")
+            await page.keyboard.press("Escape")
+            await page.wait_for_timeout(700)  # let the picker settle: a reset can land after the blur
+            if await box.input_value() == value:
+                await page.wait_for_timeout(300)
+                if await box.input_value() == value:
+                    log.info("invoice date set to %s", value)
+                    return
+        raise RetryableError("invoice date field did not keep %r (shows %r)" % (value, await box.input_value()))
+
+    async def _wait_due(self, page, resolver, expected, timeout=8.0):
+        """Wait for the due date to follow the terms. Returns the last value seen."""
+        deadline = time.monotonic() + timeout
+        while True:
+            due = await (await resolver.resolve(page, T["due_date"])).input_value()
+            if not expected or due == expected or time.monotonic() > deadline:
+                return due
+            await page.wait_for_timeout(300)
+
+    async def _close_customer_panel(self, page):
+        """Zoho can open the customer details side panel over the form. Escape closes it; it is
+        never needed for the run."""
+        try:
+            if await page.get_by_text("Outstanding Receivables").locator("visible=true").count():
+                await page.keyboard.press("Escape")
+                await page.wait_for_timeout(400)
+                log.info("closed the customer details panel")
+        except Exception:  # noqa: BLE001
+            pass
+
     async def _pick(self, page, box, text):
         """Zoho dropdowns are custom widgets, not <select>. Open, type to filter, click the option.
 
@@ -342,16 +382,15 @@ class ZohoInvoice(Portal):
         await self._clear_preferences_modal(page)
 
         await self._pick(page, await resolver.resolve(page, T["customer"]), inputs["customer"])
-        date = await resolver.resolve(page, T["invoice_date"])
-        await date.fill(inputs["invoice_date"])
-        await page.keyboard.press("Tab")
+        await self._close_customer_panel(page)
+        await self._set_date(page, await resolver.resolve(page, T["invoice_date"]), inputs["invoice_date"])
         before_due = await (await resolver.resolve(page, T["due_date"])).input_value()
         await self._pick(page, await resolver.resolve(page, T["terms"]), inputs["terms"])
-        await page.wait_for_timeout(500)
-        due = await (await resolver.resolve(page, T["due_date"])).input_value()
         expected = due_date_for(inputs["invoice_date"], inputs["terms"])
+        due = await self._wait_due(page, resolver, expected)
         if expected and due != expected:
-            raise RetryableError("dependent field mismatch: due date is %s, expected %s" % (due, expected))
+            seen = await (await resolver.resolve(page, T["invoice_date"])).input_value()
+            raise RetryableError("dependent field mismatch: invoice date shows %r, due date is %r, expected %r" % (seen, due, expected))
         log.info("due date moved %s -> %s after terms were set", before_due, due)
 
         await self._pick(page, await resolver.resolve(page, T["item"]), inputs["item"])
