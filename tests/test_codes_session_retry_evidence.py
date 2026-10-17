@@ -186,3 +186,11 @@ def test_screenshot_pixels_hide_text_identity(browser_ctx, tmp_path):
     assert "canary" in raw and "8586" in raw  # OCR works on the control
     assert "canary" not in masked and "8586" not in masked and "example.com" not in masked
     assert "inv-000001" in masked.replace(" ", "") or "invoice" in masked
+
+
+def test_redactor_masks_phone_and_listed_ids():
+    from portal_runner.redact import Redactor
+    r = Redactor(["kaylakshay", "60092053190"])
+    out = r.text('"phone":"91-8586017706","user_name":"kaylakshay","organization_id":"60092053190"')
+    for bad in ("8586017706", "kaylakshay", "60092053190"):
+        assert bad not in out

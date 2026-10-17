@@ -61,7 +61,9 @@ async def second_factor(portal_name, get_code, submit, rejected, tries=2):
 async def run(portal, inputs, creds, get_code, cfg):
     secrets = [creds.get("password", ""), creds.get("email", ""), creds.get("totp_secret", "")]
     extra = [x.strip() for x in os.environ.get("PORTAL_REDACT", "").split(",") if x.strip()]
-    redactor = Redactor(secrets + extra)
+    local = creds.get("email", "").split("@")[0]  # the page shows the email's local part as the user name
+    ids = [os.environ.get("ZOHO_ORG_ID", "")]
+    redactor = Redactor(secrets + extra + [local] + ids)
     install(redactor)
     os.makedirs(cfg.out_dir, exist_ok=True)
     manifest = Manifest(portal.name, inputs, redactor)

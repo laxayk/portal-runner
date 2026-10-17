@@ -5,6 +5,7 @@ import re
 CODE_RE = re.compile(r"(?<![\w.])\d{6,8}(?![\w.])")
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
 TOKEN_RE = re.compile(r"(?i)\b(bearer\s+[a-z0-9._\-]{12,}|[a-z0-9_\-]{32,})\b")
+PHONE_RE = re.compile(r"(?<![\w.])\+?\d[\d\- ]{8,}\d(?![\w.])")
 MASK = "[REDACTED]"
 
 
@@ -29,6 +30,7 @@ class Redactor:
         for lit in sorted(self._literals, key=len, reverse=True):
             s = s.replace(lit, MASK)
         s = EMAIL_RE.sub(MASK, s)
+        s = PHONE_RE.sub(MASK, s)
         s = CODE_RE.sub(MASK, s)
         s = TOKEN_RE.sub(MASK, s)
         return s

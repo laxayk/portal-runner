@@ -5,7 +5,7 @@ The target portal is Zoho Invoice (India data centre).
 
 ## Honest status
 
-Verified by tests (`scripts\test.ps1`, 21 tests):
+Verified by tests (`scripts\test.ps1`, 44 tests):
 - resolver, retries and backoff, session store, evidence redaction, manifest, TOTP and relay code providers
 - the resolver on saved copies of the real Zoho invoice list, new-invoice form and invoice detail pages (captured from a signed-in browser, personal details removed); the form is also tested under 6 HTML mutations (offline)
 
@@ -41,7 +41,7 @@ The first run installs everything and creates `.env`, then stops and tells you w
 Run it again after filling `.env`. It then runs the tests and the portal. Options: `-SkipTests` / `--skip-tests`, `-FailAt login` / `--fail-at login`
 (forces a failure to produce an evidence bundle), `-CodeSource` / `--code-source`.
 Fill `.env` with your portal email, password, TOTP secret and `ZOHO_ORG_ID`: sign in to Zoho Invoice and copy the number after `/app/` in the address bar.
-`go.sh` was run on Linux against a fresh clone; `go.ps1` has not been run on Windows yet.
+`go.sh` was run on Linux against a fresh clone; `go.ps1` has been run on Windows through login and the tests; the invoice form step was still failing at the last run, so there is no successful run yet.
 
 Local outputs (`outputs/failure-*/`, PDFs, `manifest.json`) are git-ignored.
 Failure bundles redact text files. Before the screenshot, the runner also blanks inputs, hides images, and replaces on-page text that matches your login values,
