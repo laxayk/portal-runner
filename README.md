@@ -100,7 +100,7 @@ and `.venv/bin/python -m portal_runner resolve-offline ...` for run 5; `-DeadSes
 
 ## Sample outputs
 
-No run outputs are committed: manifests, PDFs and failure bundles come from a real account and stay out of the public repo. The submission email carries one successful run manifest
+No run outputs are committed: manifests, PDFs and failure bundles come from a real account and stay out of the public repo. The submission email is meant to attach one successful run manifest
 (the dead-session run: full login, both New and Invoices clicks) and one failure bundle (`-FailAt perform`, checked for the account's email, phone, name and ids). Run the commands above to produce your own.
 
 ## Answers
