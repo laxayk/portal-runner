@@ -217,8 +217,8 @@ class ZohoInvoice(Portal):
 
     async def _clear_preferences_modal(self, page, wait=4.0):
         """First visit to the new-invoice form shows "Set your transaction preferences" over the
-        form. It swallows every click. Close it without touching any checkbox. If there is no
-        working close control, Save & Continue with the options exactly as shown (no change)."""
+        form. It swallows every click. Close it without touching any option. It never clicks
+        Save & Continue: that would persist account settings the user has not chosen."""
         deadline = time.monotonic() + wait
         shown = False
         while time.monotonic() < deadline:
@@ -229,7 +229,7 @@ class ZohoInvoice(Portal):
         if not shown:
             return False
         box = page.locator("[role=dialog], .modal, .modal-dialog, .zf-modal").filter(has_text=PREFS_MODAL).locator("visible=true").last
-        for how in ("close", "save"):
+        for how in ("close",):
             try:
                 if how == "close":
                     btn = box.locator("[aria-label*=close i], [title*=close i], button.close, .close, .modal-close, .close-icon").locator("visible=true").first
@@ -242,7 +242,7 @@ class ZohoInvoice(Portal):
             if not await page.get_by_text(PREFS_MODAL).locator("visible=true").count():
                 log.info("transaction preferences prompt cleared via %s, no option changed", how)
                 return True
-        raise RetryableError("transaction preferences prompt could not be dismissed")
+        raise FinalError("transaction preferences prompt has no working close control; saving it would change account settings, which needs the user's decision")
 
     async def _url_has(self, page, part, timeout):
         """Poll the address. Unlike wait_for_url this never waits for a page load event, which a

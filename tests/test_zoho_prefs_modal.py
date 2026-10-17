@@ -22,8 +22,21 @@ def test_close_control(browser_ctx):
     assert run(check(h)(browser_ctx)) == (True, 0)
 
 
-def test_fallback_save_and_continue_without_touching_boxes(browser_ctx):
-    assert run(check(BASE % "")(browser_ctx)) == (True, 0)
+def test_no_close_control_never_saves(browser_ctx):
+    import pytest
+    from portal_runner.errors import FinalError
+
+    async def go():
+        async with browser_ctx() as b:
+            page = await b.new_page()
+            await page.set_content(BASE % "")
+            try:
+                await ZohoInvoice("1")._clear_preferences_modal(page, wait=2)
+            finally:
+                still = await page.locator("#m").count()
+            return still
+    with pytest.raises(FinalError):
+        run(go())
 
 
 def test_no_modal_is_noop(browser_ctx):
