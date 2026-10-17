@@ -41,7 +41,7 @@ async def run_stage(name, fn, max_attempts=3, base_delay=0.5, max_delay=8.0, sta
             return result
         except Exception as exc:  # noqa: BLE001
             retry = is_retryable(exc)
-            first = " ".join(str(exc).split())[:300]
+            first = " ".join(str(exc).split())[:600]
             log.warning("stage %s attempt %d failed (%s, %s): %s", name, n, exc.__class__.__name__,
                         "will retry" if retry and n < max_attempts else "final", first)
             attempts.append({"n": n, "ok": False, "retryable": retry, "error": exc.__class__.__name__, "message": first,

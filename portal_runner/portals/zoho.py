@@ -308,6 +308,31 @@ class ZohoInvoice(Portal):
                 continue
         return ""
 
+    async def _trace_on(self, page):
+        """Record the pointer, focus and key events around a pick, so a pick that does not commit
+        leaves evidence of what the page actually received (target, trusted or not, order)."""
+        try:
+            await page.evaluate("""() => {
+              window.__pickTrace = [];
+              if (window.__pickTraceOn) return;
+              window.__pickTraceOn = true;
+              const d = (e) => { const t = e.target || {};
+                window.__pickTrace.push([Math.round(performance.now()), e.type,
+                  (t.tagName || '') + '.' + String(t.className || '').slice(0, 30) + '|' + String(t.textContent || '').trim().slice(0, 16),
+                  e.isTrusted ? 1 : 0]); };
+              ['mouseover', 'mousedown', 'mouseup', 'click', 'focusin', 'focusout', 'keydown'].forEach(n => document.addEventListener(n, d, true));
+            }""")
+        except Exception:  # noqa: BLE001
+            pass
+
+    async def _trace_read(self, page):
+        try:
+            return await page.evaluate("""() => JSON.stringify({events: (window.__pickTrace || []).slice(-24),
+              active: (document.activeElement || {}).tagName + '.' + String((document.activeElement || {}).className || '').slice(0, 30),
+              options: [...document.querySelectorAll('[role=option]')].filter(e => e.offsetParent).map(e => e.textContent.trim()).slice(0, 8)})""")
+        except Exception as exc:  # noqa: BLE001
+            return "unavailable: %s" % exc
+
     async def _pick(self, page, box, text, verify=False):
         """Zoho dropdowns are custom widgets, not <select>. Open, type to filter, click the option.
 
@@ -319,6 +344,8 @@ class ZohoInvoice(Portal):
         Net 30 option was highlighted but the field kept 'Due on Receipt', so the due date never
         followed. If the click did not commit, Enter takes the highlighted match; if that does
         not commit either, fail with what the field shows."""
+        if verify:
+            await self._trace_on(page)
         await box.click()
         await page.keyboard.type(text, delay=40)
         opts = page.get_by_role("option").filter(has_text=text).locator("visible=true")
@@ -340,6 +367,7 @@ class ZohoInvoice(Portal):
             if step == "click":
                 log.info("click on %r did not commit, pressing Enter", text)
                 await page.keyboard.press("Enter")
+        log.warning("pick trace for %r: %s", text, await self._trace_read(page))
         raise RetryableError("selection did not commit: wanted %r, field shows %r" % (text, await self._shown(box)))
 
     async def _capture_pdf(self, page, click, dest, timeout=30.0):
