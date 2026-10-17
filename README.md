@@ -32,6 +32,22 @@ You need your own portal account, your own login in `.env`, and a TOTP secret yo
 It accepts a plain base32 key (spaces and lowercase are fine) or a full `otpauth://` URI.
 Follow the portal's own setup screen to get the key. This repo ships no credentials.
 
+One site covers everything the assignment asks for, so there is no second site.
+
+Environment variables (put them in `.env`, copied from `.env.example`; the file is git-ignored and the scripts never print values):
+
+| Name | Needed | What it is |
+|---|---|---|
+| `PORTAL_EMAIL` | yes | your Zoho login email |
+| `PORTAL_PASSWORD` | yes | your Zoho password |
+| `PORTAL_TOTP_SECRET` | yes with `--code-source totp` (the default) | the authenticator setup key |
+| `ZOHO_ORG_ID` | yes | the number after `/app/` in the address bar once signed in |
+| `PW_CHANNEL` | no | `chrome` to use installed Chrome instead of Playwright's Chromium |
+| `PORTAL_REDACT` | no | extra words to hide in failure evidence, comma separated (your name, company, phone) |
+
+Inputs are in `inputs/invoice.json` (customer, invoice_date as dd/mm/yyyy, terms, item, quantity). Change a value there, or pass another file with `--inputs`, and no code changes.
+The manifest (`outputs/manifest-<time>.json`) holds: `inputs`, `login_mode`, `pages_visited`, `stage_timings`, `total_seconds`, `captured_files` (name, size, sha256), `resolver_wins`, `navigation`, `status`, and on failure `failed_stage` and `failure_bundle`.
+
 ## One command (setup, checks, tests, run)
 
 First get the code and open a terminal in its folder (needs Git and Python 3.9+):
