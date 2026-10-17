@@ -203,3 +203,11 @@ def test_child_logger_messages_are_redacted(capsys):
     logging.getLogger("portal_runner.zoho").warning("login hunter2pass code 123456 to a@b.co")
     err = capsys.readouterr().err
     assert "hunter2pass" not in err and "123456" not in err and "a@b.co" not in err
+
+
+def test_url_keeps_spa_route_but_not_ids_or_tokens():
+    from portal_runner.redact import Redactor
+    r = Redactor(["60092053190"])
+    assert r.url("https://invoice.zoho.in/app/60092053190#/invoices/4299035000000040001?x=1") == "https://invoice.zoho.in/app/[REDACTED]#/invoices/[REDACTED]"
+    assert r.url("https://x.example/cb?code=abc#access_token=secret") == "https://x.example/cb"
+    assert r.url("https://invoice.zoho.in/app/60092053190#/invoices/new") != r.url("https://invoice.zoho.in/app/60092053190#/invoices")

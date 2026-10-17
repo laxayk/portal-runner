@@ -128,5 +128,7 @@ async def run(portal, inputs, creds, get_code, cfg):
             manifest.data["total_seconds"] = round(time.monotonic() - t_all, 3)
             manifest.data["resolver_wins"] = resolver.wins
             manifest.write(os.path.join(cfg.out_dir, "manifest.json"))
+            # keep every run's manifest: manifest.json is overwritten by the next run
+            manifest.write(os.path.join(cfg.out_dir, "manifest-%s.json" % time.strftime("%Y%m%d_%H%M%S")))
             await context.close()
             await browser.close()

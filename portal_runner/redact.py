@@ -6,6 +6,7 @@ CODE_RE = re.compile(r"(?<![\w.])\d{6,8}(?![\w.])")
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
 TOKEN_RE = re.compile(r"(?i)\b(bearer\s+[a-z0-9._\-]{12,}|[a-z0-9_\-]{32,})\b")
 PHONE_RE = re.compile(r"(?<![\w.])\+?\d[\d\- ]{8,}\d(?![\w.])")
+ID_RE = re.compile(r"\d{8,}")
 MASK = "[REDACTED]"
 
 
@@ -36,11 +37,17 @@ class Redactor:
         return s
 
     def url(self, u):
-        """Keep scheme, host and path. Drop query and fragment, which carry tokens and ids."""
+        """Keep scheme, host and path, plus a route-style fragment ('#/invoices/new'). Drop the query
+        and any other fragment (they carry tokens), and mask long numeric ids. Single page apps such
+        as Zoho change only the fragment between pages, so dropping it hid every page after the first."""
         if not u:
             return u
-        u = u.split("#", 1)[0].split("?", 1)[0]
-        return self.text(u)
+        base, _, frag = u.partition("#")
+        base = base.split("?", 1)[0]
+        route = ""
+        if frag.startswith("/"):
+            route = "#" + frag.split("?", 1)[0]
+        return ID_RE.sub("[id]", self.text(base + route))
 
 
 class LogFilter(logging.Filter):
