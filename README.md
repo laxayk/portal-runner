@@ -5,14 +5,21 @@ The target portal is Zoho Invoice (India data centre).
 
 ## Honest status
 
-Verified by tests (`scripts\test.ps1`, 48 tests on Linux; on Windows 1 test skips when tesseract is missing):
-- resolver, retries and backoff, session store, evidence redaction, manifest, TOTP and relay code providers
+Verified by tests (`scripts\test.ps1`; 54 tests pass on Linux, on Windows 1 test skips when tesseract is missing):
+- resolver, retries and backoff, session store, evidence redaction, manifest, TOTP and relay code providers, the New-button route with its address fallback, the `kill-session` and `last-run` helpers
 - the resolver on saved copies of the real Zoho invoice list, new-invoice form and invoice detail pages (captured from a signed-in browser, personal details removed); the form is also tested under 6 HTML mutations (offline)
+- on the author's saved dashboard page from a failure bundle (private, not in this repo), the nav link resolved in all 7 offline variants (baseline plus 6 mutations). Only that one target exists on that page.
 
-Observed live (author's Windows machine, Oct 18 00:06 IST): one end-to-end run with a REUSED saved session. It filled the form (Net 30 moved the due date from 15/10/2026 to 14/11/2026),
-saved a draft invoice, and captured the PDF. The manifest for that run says `login_mode: session_reused`.
+Observed live (author's Windows machine, Zoho Invoice test account, Oct 18 around 00:06 to 00:32 IST). Each is one run, not a benchmark:
+- saved session reused: login_mode `session_reused`, Net 30 moved the due date from 15/10/2026 to 14/11/2026, draft saved, PDF captured
+- fresh login with the automatic TOTP code after deleting the saved session: login_mode `full_login`, login stage about 13 s, PDF captured
+- dead saved session (`-DeadSession`: the file still parses but the cookie values are replaced): the session check was sent to the login page, then a full login ran and the run succeeded. The manifest shows the stage order; it has no field giving the reason.
+- changed inputs (`inputs/invoice_changed.json`: other date, Due on Receipt, quantity 5): the PDF showed the new date, terms, due date and a total of 12,500, with no code edit
+- the New button clicked from the invoice list (manifest `navigation`), in the runs after that change
+- a deliberate failure (`-FailAt perform`): 3 attempts with backoff, then an evidence bundle (URL, stage, console log, resolver attempts, HTML, screenshot). That first bundle showed the organisation name unredacted in the HTML and on screen. The runner now learns the organisation and portal names from the page and redacts them. The text part of that fix was checked against the saved page; the screenshot after the fix has not been seen yet.
 
-NOT yet observed live with this code: a fresh TOTP login run, recovery from a corrupt saved session, a run with changed inputs, and a deliberately failed run's evidence bundle.
+Not observed live: recovery from an unparseable state file (unit-tested only); a failure at a step other than the forced one.
+The Zoho invoice status in the app was not looked up for each run; draft status rests on the app's own redirect to the new invoice and the "Draft" ribbon the runner waits for.
 `outputs/offline_resolve_example.json` is offline resolver output only, not a portal run.
 
 **What "pages deep" means here.** Zoho Invoice is a single page app, so its pages are hash routes, not full page loads. A run visits `#/home`, `#/invoices` (the list),
@@ -45,11 +52,11 @@ Linux or macOS:
 
 The first run installs everything and creates `.env`, then stops and tells you which names to fill in (it never prints values).
 Run it again after filling `.env`. It then runs the tests and the portal. Options: `-SkipTests` / `--skip-tests`, `-FailAt login` / `--fail-at login`
-(forces a failure to produce an evidence bundle), `-DeadSession` (Windows script only: keeps a backup of the saved session, overwrites its cookie values so the file still parses but the portal rejects it, runs, then prints the login mode of the run; evaluation only, ordinary runs are unchanged), `-CodeSource` / `--code-source`.
+(forces a failure at that stage and, for the demo, zips the bundle; it only counts as expected if the forced failure at the requested stage produced the bundle), `-Inputs <file>` (use another input JSON, for example `inputs\invoice_changed.json`), `-DeadSession` (Windows script only: keeps a backup of the saved session, overwrites its cookie values so the file still parses but the portal rejects it, runs, then prints the login mode of the run; evaluation only, ordinary runs are unchanged), `-CodeSource` / `--code-source`.
 Fill `.env` with your portal email, password, TOTP secret and `ZOHO_ORG_ID`: sign in to Zoho Invoice and copy the number after `/app/` in the address bar.
 `go.sh` was run on Linux against a fresh clone; `go.ps1` has been run on Windows (see Honest status above).
 
-Local outputs (`outputs/failure-*/`, PDFs, `manifest.json`) are git-ignored.
+Local outputs (`outputs/failure-*/`, failure zips, PDFs, manifests) are git-ignored.
 Failure bundles redact text files. Before the screenshot, the runner also blanks inputs, hides images, and replaces on-page text that matches your login values,
 emails, phone-like numbers, 6-8 digit codes and anything listed in `PORTAL_REDACT` in `.env` (put your name, company name and phone there).
 Tested: an OCR check on a screenshot with canary text. Not covered: names or details that are neither in `PORTAL_REDACT` nor match those patterns, and the downloaded
@@ -78,7 +85,7 @@ a PDF produced by a menu action, captured by download and checked for the `%PDF`
 **What retries.** Timeouts, locator misses and navigation errors retry with bounded exponential backoff. A wrong code retries once. Bad input JSON and a
 failed second factor do not retry.
 
-**Failure bundle.** Final failures write a redacted bundle (page text, screenshot-free by default, stage, timings). Redaction is tested with canary secrets.
+**Failure bundle.** Final failures write a redacted bundle: URL, stage key, console log, resolver attempts, page HTML and a screenshot. Text files are redacted; inputs are masked and on-page text matching known values and patterns is replaced before the screenshot. Redaction is tested with canary secrets. A live bundle exposed an organisation name that no pattern covered, which is why names found in the page's own data are now added automatically. Treat bundles as private.
 
 **For 100 portals, change first.** Move the per-portal Targets and the login steps into data files with a shared adapter, and add a recorded-HTML regression suite per portal, so
 a site change shows up in tests before a run fails.
