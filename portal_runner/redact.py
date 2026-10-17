@@ -55,12 +55,16 @@ class LogFilter(logging.Filter):
 
 
 def install(redactor, level=logging.INFO):
+    """Redact on the handlers: a filter on the parent logger is skipped for records from child
+    loggers such as portal_runner.zoho and portal_runner.codes, so it would not cover them."""
     log = logging.getLogger("portal_runner")
     log.setLevel(level)
-    if not any(isinstance(f, LogFilter) for f in log.filters):
-        log.addFilter(LogFilter(redactor))
     if not log.handlers:
         h = logging.StreamHandler()
         h.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
         log.addHandler(h)
+    for h in log.handlers:
+        for f in [f for f in h.filters if isinstance(f, LogFilter)]:
+            h.removeFilter(f)
+        h.addFilter(LogFilter(redactor))
     return log

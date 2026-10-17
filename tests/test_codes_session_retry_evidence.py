@@ -194,3 +194,12 @@ def test_redactor_masks_phone_and_listed_ids():
     out = r.text('"phone":"91-8586017706","user_name":"kaylakshay","organization_id":"60092053190"')
     for bad in ("8586017706", "kaylakshay", "60092053190"):
         assert bad not in out
+
+
+def test_child_logger_messages_are_redacted(capsys):
+    import logging
+    from portal_runner.redact import Redactor, install
+    install(Redactor(["hunter2pass"]))
+    logging.getLogger("portal_runner.zoho").warning("login hunter2pass code 123456 to a@b.co")
+    err = capsys.readouterr().err
+    assert "hunter2pass" not in err and "123456" not in err and "a@b.co" not in err
