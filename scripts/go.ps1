@@ -41,17 +41,24 @@ if ($DeadSession) {
 
 $a = @("-m", "portal_runner", "run", "--inputs", $Inputs, "--code-source", $CodeSource)
 if ($FailAt) { $a += @("--fail-at", $FailAt) }
+$runStart = Get-Date
 & $vpy @a
 $runCode = $LASTEXITCODE
 if ($DeadSession -or $Inputs -ne "inputs\invoice.json") { & $vpy -m portal_runner last-run --out outputs }
 if ($FailAt -and $runCode -ne 0) {
-  # Deliberate failure for the evidence demo: zip the newest bundle (never .env or .state) so it is one file to send.
-  $b = Get-ChildItem outputs -Directory -Filter "failure-*" | Sort-Object LastWriteTime | Select-Object -Last 1
+  # Only a failure at the stage we asked for, made by the forced-failure hook, counts as expected.
+  # Anything else falls through to the normal "Run failed" exit.
+  $b = Get-ChildItem outputs -Directory -Filter "failure-*" | Where-Object { $_.LastWriteTime -ge $runStart } | Sort-Object LastWriteTime | Select-Object -Last 1
   if ($b) {
-    $z = Join-Path "outputs" ($b.Name + ".zip")
-    Compress-Archive -Path $b.FullName -DestinationPath $z -Force
-    Write-Host ("Expected failure. Evidence bundle zipped to " + $z + " (contains a screenshot and page HTML; send it to the reviewer only).")
-    exit 0
+    $st = (Get-Content (Join-Path $b.FullName "stage.txt") -Raw).Trim()
+    $er = Get-Content (Join-Path $b.FullName "error.txt") -Raw
+    if (($st -eq $FailAt) -and ($er -match "forced failure for evidence demo")) {
+      $z = Join-Path "outputs" ($b.Name + ".zip")
+      Compress-Archive -Path $b.FullName -DestinationPath $z -Force
+      Write-Host ("Expected failure at stage " + $st + ". Evidence bundle zipped to " + $z + " (contains a screenshot and page HTML; send it to the reviewer only).")
+      exit 0
+    }
+    Write-Host ("Unexpected failure at stage " + $st + ". Bundle left in " + $b.FullName)
   }
 }
 if ($runCode -ne 0) { Write-Host "Run failed. Look in outputs\ for the evidence bundle."; exit 1 }
