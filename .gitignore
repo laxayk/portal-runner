@@ -9,3 +9,4 @@ outputs/failure-*/
 outputs/*.pdf
 outputs/manifest.json
 outputs/manifest-*.json
+outputs/failure-*.zip

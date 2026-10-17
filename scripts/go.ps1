@@ -44,5 +44,15 @@ if ($FailAt) { $a += @("--fail-at", $FailAt) }
 & $vpy @a
 $runCode = $LASTEXITCODE
 if ($DeadSession -or $Inputs -ne "inputs\invoice.json") { & $vpy -m portal_runner last-run --out outputs }
+if ($FailAt -and $runCode -ne 0) {
+  # Deliberate failure for the evidence demo: zip the newest bundle (never .env or .state) so it is one file to send.
+  $b = Get-ChildItem outputs -Directory -Filter "failure-*" | Sort-Object LastWriteTime | Select-Object -Last 1
+  if ($b) {
+    $z = Join-Path "outputs" ($b.Name + ".zip")
+    Compress-Archive -Path $b.FullName -DestinationPath $z -Force
+    Write-Host ("Expected failure. Evidence bundle zipped to " + $z + " (contains a screenshot and page HTML; send it to the reviewer only).")
+    exit 0
+  }
+}
 if ($runCode -ne 0) { Write-Host "Run failed. Look in outputs\ for the evidence bundle."; exit 1 }
 Write-Host "Done. See outputs\ (manifest.json, captured files)."
