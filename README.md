@@ -98,6 +98,11 @@ On Linux or macOS use `./scripts/go.sh --skip-tests` for runs 1 and 2 (delete `.
 and `.venv/bin/python -m portal_runner resolve-offline ...` for run 5; `-DeadSession` and `-Inputs` exist only in `go.ps1`
 (`python -m portal_runner run --inputs inputs/invoice_changed.json` does the changed-input run anywhere).
 
+## Sample outputs
+
+No run outputs are committed: manifests, PDFs and failure bundles come from a real account and stay out of the public repo. The submission email carries one successful run manifest
+(the dead-session run: full login, both New and Invoices clicks) and one failure bundle (`-FailAt perform`, checked for the account's email, phone, name and ids). Run the commands above to produce your own.
+
 ## Answers
 
 **Note:** the assignment asks for a code obtained without a human typing it. `RelayProvider` is a convenience for local testing and does not meet that. `TotpProvider` is the compliant provider.
