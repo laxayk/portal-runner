@@ -5,7 +5,7 @@ The target portal is Zoho Invoice (India data centre).
 
 ## Honest status
 
-Verified by tests (`scripts\test.ps1`; 54 tests pass on Linux, on Windows 1 test skips when tesseract is missing):
+Verified by tests (`.\scripts\go.ps1` runs them first, or `.\.venv\Scripts\python.exe -m pytest -q`; 54 tests pass on Linux, on Windows 1 test skips when tesseract is missing):
 - resolver, retries and backoff, session store, evidence redaction, manifest, TOTP and relay code providers, the New-button route with its address fallback, the `kill-session` and `last-run` helpers
 - the resolver on saved copies of the real Zoho invoice list, new-invoice form and invoice detail pages (captured from a signed-in browser, personal details removed); the form is also tested under 6 HTML mutations (offline)
 - on the author's saved dashboard page from a failure bundle (private, not in this repo), the nav link resolved in all 7 offline variants (baseline plus 6 mutations). Only that one target exists on that page.
@@ -20,7 +20,6 @@ Observed live (author's Windows machine, Zoho Invoice test account, Oct 18 aroun
 
 Not observed live: recovery from an unparseable state file (unit-tested only); a failure at a step other than the forced one.
 The Zoho invoice status in the app was not looked up for each run; draft status rests on the app's own redirect to the new invoice and the "Draft" ribbon the runner waits for.
-`outputs/offline_resolve_example.json` is offline resolver output only, not a portal run.
 
 **What "pages deep" means here.** Zoho Invoice is a single page app, so its pages are hash routes, not full page loads. A run visits `#/home`, `#/invoices` (the list),
 `#/invoices/new` (the form) and `#/invoices/<id>` (the saved draft, where the PDF menu is). The list is reached by clicking Invoices (with a direct-address fallback when the sidebar
@@ -61,6 +60,27 @@ Failure bundles redact text files. Before the screenshot, the runner also blanks
 emails, phone-like numbers, 6-8 digit codes and anything listed in `PORTAL_REDACT` in `.env` (put your name, company name and phone there).
 Tested: an OCR check on a screenshot with canary text. Not covered: names or details that are neither in `PORTAL_REDACT` nor match those patterns, and the downloaded
 PDF, which is never redacted. Treat bundles and PDFs as private and look at a screenshot before sharing it.
+
+## Evaluation runs: commands and expected results
+
+Run these from the repo folder in Windows PowerShell, in this order, after `.env` is filled in and `git pull` is done. Each live run signs in to your own Zoho test account and,
+except the failure run, saves one more draft invoice (it never sends an invoice). Every run writes `outputs\manifest-<time>.json`; PDFs and failure bundles are timestamped too, so nothing is overwritten.
+Use `.\scripts\go.ps1` without `-SkipTests` once if you also want the tests run first.
+
+| # | Assignment check | Command | Expected result |
+|---|---|---|---|
+| 1 | No saved state (full login with the automatic code) | `Remove-Item .state\session.json -ErrorAction SilentlyContinue; .\scripts\go.ps1 -SkipTests` | manifest `login_mode: full_login`, a `login` stage in `stage_timings`, `status: success`, one PDF in `outputs\` |
+| 2 | Rerun (session reuse) | `.\scripts\go.ps1 -SkipTests` | `login_mode: session_reused`, no `login` stage, shorter total time, `status: success` |
+| 3 | Corrupt or stale saved state | `.\scripts\go.ps1 -SkipTests -DeadSession` | the saved session is backed up and its cookie values overwritten; the console prints `login_mode=full_login`, `status=success` and how each page was reached |
+| 3b | Unparseable state file (optional, unit-tested only so far) | `Set-Content .state\session.json "{not json"; .\scripts\go.ps1 -SkipTests` | log line `saved state unusable ... will do a full login`, then `login_mode: full_login`, `status: success` |
+| 4 | Changed input | `.\scripts\go.ps1 -SkipTests -Inputs inputs\invoice_changed.json` | manifest `inputs` show 16/10/2026, Due on Receipt, quantity 5; the PDF shows the same, due date 16/10/2026 and a total of 12,500; no code edited |
+| 5 | Mutated HTML, offline | `.\.venv\Scripts\python.exe -m portal_runner resolve-offline --html tests\fixtures\zoho_invoice_form.html --mutate` | JSON with 7 variants (baseline, renamed classes and ids, broken label links, reordered siblings, wrapper div, inside iframe, all combined); every target names a winning strategy, none says `FAILED` |
+| 6 | Broken step (failure bundle) | `.\scripts\go.ps1 -SkipTests -FailAt perform` | 3 attempts with backoff, then `Expected failure at stage perform` and a zip `outputs\failure-perform-<time>.zip` holding URL, stage key, console log, resolver attempts, page HTML and screenshot with secrets redacted; no new draft |
+
+The redaction covers your login values, emails, phone-like numbers, codes, and organisation and portal names read from the page. Look at a bundle before sharing it.
+On Linux or macOS use `./scripts/go.sh --skip-tests` for runs 1 and 2 (delete `.state/session.json` first for run 1), `./scripts/go.sh --skip-tests --fail-at perform` for run 6,
+and `.venv/bin/python -m portal_runner resolve-offline ...` for run 5; `-DeadSession` and `-Inputs` exist only in `go.ps1`
+(`python -m portal_runner run --inputs inputs/invoice_changed.json` does the changed-input run anywhere).
 
 ## Answers
 
