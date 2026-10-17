@@ -258,12 +258,21 @@ class ZohoInvoice(Portal):
 
     # ---- work ----------------------------------------------------------------------------------
     async def _pick(self, page, box, text):
-        """Zoho dropdowns are custom widgets, not <select>. Open, type to filter, click the option."""
+        """Zoho dropdowns are custom widgets, not <select>. Open, type to filter, click the option.
+
+        The option is found as role=option (live DOM: customer, terms and item lists are all
+        listbox > option). A loose get_by_text(...).last can land on other text that merely
+        contains the name, such as the customer's details tab or panel, and open it instead."""
         await box.click()
         await page.keyboard.type(text, delay=40)
-        opt = page.get_by_text(text, exact=False).locator("visible=true").last
-        await opt.wait_for(state="visible", timeout=8000)
-        await opt.click()
+        opts = page.get_by_role("option").filter(has_text=text).locator("visible=true")
+        try:
+            await opts.first.wait_for(state="visible", timeout=8000)
+            await opts.first.click()
+        except Exception:  # noqa: BLE001
+            opt = page.locator("[role=listbox]").get_by_text(text, exact=False).locator("visible=true").first
+            await opt.wait_for(state="visible", timeout=4000)
+            await opt.click()
 
     async def _capture_pdf(self, page, click, dest, timeout=30.0):
         """Click PDF and save the file. Live check (Oct 17): the click fires
