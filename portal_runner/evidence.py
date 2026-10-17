@@ -1,5 +1,6 @@
 """Failure evidence bundle. Everything written here is redacted first."""
 import json
+import re
 import os
 import time
 
@@ -30,6 +31,16 @@ async def mask_page_text(page, redactor):
             pass
 
 
+ACCOUNT_NAME_RE = re.compile(r'"(?:org_name|org_alias_name|portal_name)"\s*:\s*"([^"]{4,80})"')
+
+
+def learn_account_names(html, redactor):
+    """The page itself says what the organisation and portal are called (seen live Oct 18: the org
+    name and portal name were in page.html and on screen). Hide those values everywhere, text and pixels."""
+    for m in ACCOUNT_NAME_RE.finditer(html or ""):
+        redactor.add(m.group(1).strip())
+
+
 async def write_bundle(out_dir, page, stage, error, resolver, console_lines, redactor, extra=None):
     ts = time.strftime("%Y%m%d_%H%M%S")
     path = os.path.join(out_dir, "failure-%s-%s" % (stage, ts))
@@ -51,6 +62,7 @@ async def write_bundle(out_dir, page, stage, error, resolver, console_lines, red
         html = await page.content()
     except Exception as exc:  # noqa: BLE001
         html = "<!-- could not read page: %s -->" % exc.__class__.__name__
+    learn_account_names(html, redactor)
     put("page.html", html)
     put("console.log", "\n".join(console_lines))
     put("stage.txt", stage)

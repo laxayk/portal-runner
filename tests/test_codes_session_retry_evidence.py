@@ -211,3 +211,13 @@ def test_url_keeps_spa_route_but_not_ids_or_tokens():
     assert r.url("https://invoice.zoho.in/app/60092053190#/invoices/4299035000000040001?x=1") == "https://invoice.zoho.in/app/[REDACTED]#/invoices/[REDACTED]"
     assert r.url("https://x.example/cb?code=abc#access_token=secret") == "https://x.example/cb"
     assert r.url("https://invoice.zoho.in/app/60092053190#/invoices/new") != r.url("https://invoice.zoho.in/app/60092053190#/invoices")
+
+
+def test_account_names_in_page_are_learned_and_redacted():
+    from portal_runner.evidence import learn_account_names
+    from portal_runner.redact import Redactor
+    r = Redactor()
+    html = '{"org_name":"Jane Doe (test)","portal_name":"janedoetest","org_alias_name":"Jane Doe (test)"} <b>Jane Doe (test)</b> janedoetest'
+    learn_account_names(html, r)
+    out = r.text(html)
+    assert "Jane" not in out and "janedoetest" not in out
