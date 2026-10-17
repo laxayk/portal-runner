@@ -38,6 +38,7 @@ T = {
 }
 
 DIGITS = re.compile(r"^\d{6}$")
+PREFS_MODAL = re.compile(r"set your transaction preferences", re.I)
 TRUST_PROMPT = re.compile(r"trust this browser", re.I)
 OTP_ERROR = re.compile(r"invalid|incorrect|wrong|expired|didn'?t match|does not match", re.I)
 
@@ -214,6 +215,35 @@ class ZohoInvoice(Portal):
 
         await second_factor(self.name, get_code, submit, rejected)
 
+    async def _clear_preferences_modal(self, page, wait=4.0):
+        """First visit to the new-invoice form shows "Set your transaction preferences" over the
+        form. It swallows every click. Close it without touching any checkbox. If there is no
+        working close control, Save & Continue with the options exactly as shown (no change)."""
+        deadline = time.monotonic() + wait
+        shown = False
+        while time.monotonic() < deadline:
+            if await page.get_by_text(PREFS_MODAL).locator("visible=true").count():
+                shown = True
+                break
+            await page.wait_for_timeout(300)
+        if not shown:
+            return False
+        box = page.locator("[role=dialog], .modal, .modal-dialog, .zf-modal").filter(has_text=PREFS_MODAL).locator("visible=true").last
+        for how in ("close", "save"):
+            try:
+                if how == "close":
+                    btn = box.locator("[aria-label*=close i], [title*=close i], button.close, .close, .modal-close, .close-icon").locator("visible=true").first
+                else:
+                    btn = page.get_by_role("button", name=re.compile(r"save\s*&\s*continue", re.I)).locator("visible=true").first
+                await btn.click(timeout=2500)
+            except Exception:  # noqa: BLE001
+                continue
+            await page.wait_for_timeout(800)
+            if not await page.get_by_text(PREFS_MODAL).locator("visible=true").count():
+                log.info("transaction preferences prompt cleared via %s, no option changed", how)
+                return True
+        raise RetryableError("transaction preferences prompt could not be dismissed")
+
     async def _url_has(self, page, part, timeout):
         """Poll the address. Unlike wait_for_url this never waits for a page load event, which a
         single page app route change may not fire."""
@@ -256,6 +286,7 @@ class ZohoInvoice(Portal):
                 raise RetryableError("invoice list did not open; url is %s" % page.url.split("?")[0])
         await page.goto(APP % self.org_id + "#/invoices/new", wait_until="domcontentloaded")  # page 3: form
         visit(page.url)
+        await self._clear_preferences_modal(page)
 
         await self._pick(page, await resolver.resolve(page, T["customer"]), inputs["customer"])
         date = await resolver.resolve(page, T["invoice_date"])
