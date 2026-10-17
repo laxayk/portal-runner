@@ -6,6 +6,46 @@ Flow: log in (TOTP) -> save the session to `.state/session.json` -> next run reu
 
 Zoho Invoice is a single page app, so its pages are hash routes (`#/home`, `#/invoices`, `#/invoices/new`, `#/invoices/<id>`).
 
+## Code flow
+
+```mermaid
+flowchart TD
+    A["go.ps1 / go.sh<br/>python -m portal_runner run"] --> B["__main__.py<br/>reads .env and inputs/invoice.json"]
+    B --> C["runner.py run()<br/>each stage runs inside retry.py<br/>3 attempts with backoff"]
+    C --> D{"saved session alive?<br/>session_check stage"}
+    D -- "yes" --> E["reuse .state/session.json<br/>login_mode = session_reused"]
+    D -- "no" --> F["login stage<br/>email, password, TOTP code from codes.py<br/>one retry on a rejected code<br/>session saved for the next run"]
+    E --> G["perform stage<br/>portals/zoho.py"]
+    F --> G
+    G --> H{"draft already saved?<br/>(perform is a retry)"}
+    H -- "no" --> I["Home, Invoices, New form<br/>customer, invoice date, terms<br/>due date must follow the terms<br/>item, rate, quantity"]
+    I --> K["Save as Draft<br/>an unconfirmed save is final:<br/>stop rather than risk a second draft"]
+    H -- "yes" --> J["reopen the saved draft by its address<br/>only the failed step is repeated"]
+    K --> L["PDF/Print, PDF<br/>saved from the download event<br/>or the inline response body"]
+    J --> L
+    L --> M["outputs/: PDF + manifest.json<br/>pages visited, stage timings,<br/>resolver wins, sha256 of files"]
+    R["resolver.py finds every element:<br/>role+name, label, nearby text,<br/>structure, then id/class"] -.-> F
+    R -.-> G
+    C -. "a stage fails for good" .-> X["evidence.py writes a redacted bundle<br/>to outputs/failure-stage-time/"]
+```
+
+## Main files
+
+| File | What it does |
+|---|---|
+| `portal_runner/__main__.py` | command line: `run`, `resolve-offline`, `kill-session`, `last-run`; reads `.env` and the inputs JSON |
+| `portal_runner/runner.py` | runs one job end to end: session reuse or login, the portal's work, the manifest, the failure bundle. `Portal` is the adapter interface a second site would implement |
+| `portal_runner/portals/zoho.py` | the Zoho Invoice adapter: element targets, login with code-verdict checks, the form fill, the draft save, the PDF capture |
+| `portal_runner/resolver.py` | finds one element from several hints in a fixed order (role+name down to id/class); works on a live page and on saved HTML |
+| `portal_runner/session.py` | saves and loads `.state/session.json`; decides whether a saved session is really alive |
+| `portal_runner/codes.py` | `TotpProvider` computes the authenticator code itself; `RelayProvider` (a code dropped in `.state/code.txt`) is for local testing |
+| `portal_runner/retry.py`, `errors.py` | bounded retries with backoff; retryable errors are kept apart from final ones |
+| `portal_runner/evidence.py`, `redact.py` | the failure bundle (url, page HTML, console, screenshot, resolver attempts) and the redaction applied to everything written |
+| `portal_runner/manifest.py` | the run report: inputs, pages, timings, resolver wins, captured files with sha256 |
+| `portal_runner/mutate.py` | HTML mutations that prove the resolver survives a redesign; used by `resolve-offline` |
+| `inputs/invoice.json` | the values the form is filled with |
+| `tests/` | 57 tests, all offline; Zoho pages are replayed from recorded fixtures |
+
 ## Run it
 
 Needs Git and Python 3.9+.
