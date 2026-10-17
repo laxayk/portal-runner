@@ -25,6 +25,18 @@ The first run installs everything and creates `.env`, then stops. Fill in `.env`
 | `PW_CHANNEL` | no | `chrome` to use installed Chrome |
 | `PORTAL_REDACT` | no | extra words to hide in failure evidence (name, phone) |
 
+### Getting `PORTAL_TOTP_SECRET`
+
+The secret is the setup key Zoho shows when you enrol an authenticator app. It is not the 6-digit code that changes every 30 seconds.
+
+1. Sign in at `accounts.zoho.in` (use `accounts.zoho.com` for other data centres), open **Multi-Factor Authentication** and click **Set up Now** under **OTP Authenticator**.
+2. Zoho shows a QR code and a setup key. Copy the key (use "enter the key manually" if the page offers it). Paste it into `.env` as `PORTAL_TOTP_SECRET=...`. A base32 key (spaces and lowercase are fine) or a full `otpauth://totp/...` link both work; the bot assumes 6 digits and 30 seconds unless the link says otherwise.
+3. Add the same key to your phone's authenticator app too (type it in or scan the QR), enter the code it shows and click **Verify**. Zoho only confirms setup after that.
+4. Save the backup codes Zoho offers.
+
+If the account already has an authenticator, Zoho does not show the key again and the phone app cannot export it, so use a test account you set up this way. If your organisation's admin restricts MFA setup, ask the admin. Keep `.env` out of git (it is in `.gitignore`) and never share the key: anyone with it can generate your codes.
+Zoho's guide: https://help.zoho.com/portal/en/kb/accounts/multi-factor-authentication/articles/mfa-totp
+
 Inputs are in `inputs/invoice.json` (`customer`, `invoice_date` as dd/mm/yyyy, `terms`, `item`, `quantity`). Edit it or pass another file; no code change.
 
 ## Evaluation runs
