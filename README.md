@@ -1,61 +1,25 @@
 # portal-runner
 
-A single-process Playwright CLI for a portal that asks for a second factor. This is a take-home build.
-The target portal is Zoho Invoice (India data centre).
+A command-line Playwright bot that signs in to Zoho Invoice (India data centre, my own test account) through an authenticator-app second factor, creates a draft invoice from a JSON file, and saves the invoice PDF.
 
-## Honest status
+One site covers everything the brief asks for, so there is no second site.
 
-Verified by tests (`.\scripts\go.ps1` runs them first, or `.\.venv\Scripts\python.exe -m pytest -q`; 54 tests pass on Linux, on Windows 1 test skips when tesseract is missing):
-- resolver, retries and backoff, session store, evidence redaction, manifest, TOTP and relay code providers, the New-button route with its address fallback, the `kill-session` and `last-run` helpers
-- the resolver on saved copies of the real Zoho invoice list, new-invoice form and invoice detail pages (captured from a signed-in browser, personal details removed); the form is also tested under 6 HTML mutations (offline)
-- on the author's saved dashboard page from a failure bundle (private, not in this repo), the nav link resolved in all 7 offline variants (baseline plus 6 mutations). Only that one target exists on that page.
+## What it does
 
-Observed live (author's Windows machine, Zoho Invoice test account, Oct 18 around 00:06 to 00:32 IST). Each is one run, not a benchmark:
-- saved session reused: login_mode `session_reused`, Net 30 moved the due date from 15/10/2026 to 14/11/2026, draft saved, PDF captured
-- fresh login with the automatic TOTP code after deleting the saved session: login_mode `full_login`, login stage about 13 s, PDF captured
-- dead saved session (`-DeadSession`: the file still parses but the cookie values are replaced): the session check was sent to the login page, then a full login ran and the run succeeded. The manifest shows the stage order; it has no field giving the reason.
-- changed inputs (`inputs/invoice_changed.json`: other date, Due on Receipt, quantity 5): the PDF showed the new date, terms, due date and a total of 12,500, with no code edit
-- the New button clicked from the invoice list (manifest `navigation`), in the runs after that change
-- a deliberate failure (`-FailAt perform`): 3 attempts with backoff, then an evidence bundle (URL, stage, console log, resolver attempts, HTML, screenshot). That first bundle showed the organisation name unredacted in the HTML and on screen. The runner now learns the organisation and portal names from the page and redacts them. A second run after the fix produced a bundle whose text files and screenshot were checked for the account's email, phone, name and ids: none were found, and the name on screen read [REDACTED]. That check covers known values on one dashboard page, not every possible personal detail.
+1. Logs in with email, password and a TOTP code it computes itself from my authenticator secret. No one types the code.
+2. Saves the browser session to `.state/session.json`. The next run loads it. If the session is dead, it signs in again by itself.
+3. Opens Home, then Invoices, then clicks New and fills the invoice form: customer, invoice date, payment terms, item and quantity. The due date depends on the terms. The bot checks that it moved as expected.
+4. Saves the invoice as a draft (it never sends one) and downloads the PDF from the invoice's menu.
+5. Writes `outputs/manifest-<time>.json` with the inputs, pages visited, stage timings and captured files.
 
-Not observed live: recovery from an unparseable state file (unit-tested only); a failure at a step other than the forced one.
-The Zoho invoice status in the app was not looked up for each run; draft status rests on the app's own redirect to the new invoice and the "Draft" ribbon the runner waits for.
+Zoho Invoice is a single page app: its screens are hash routes (`#/home`, `#/invoices`, `#/invoices/new`, `#/invoices/<id>`), not full page loads. The manifest lists the routes visited and how each was reached (`navigation`).
 
-**What "pages deep" means here.** Zoho Invoice is a single page app, so its pages are hash routes, not full page loads. A run visits `#/home`, `#/invoices` (the list),
-`#/invoices/new` (the form) and `#/invoices/<id>` (the saved draft, where the PDF menu is). The list is reached by clicking Invoices (with a direct-address fallback when the sidebar
-swallows the click), and the form is opened by clicking "New" on the list, falling back to its address if the click does not reach the form. The manifest's `navigation` field says which way each page was reached, and `pages_visited` records the routes with ids masked.
-Whether that counts as "three pages deep" is the reviewer's definition.
+## Setup and run
 
-## Running it yourself
-
-You need your own portal account, your own login in `.env`, and a TOTP secret you control (`PORTAL_TOTP_SECRET`).
-It accepts a plain base32 key (spaces and lowercase are fine) or a full `otpauth://` URI.
-Follow the portal's own setup screen to get the key. This repo ships no credentials.
-
-One site covers everything the assignment asks for, so there is no second site.
-
-Environment variables (put them in `.env`, copied from `.env.example`; the file is git-ignored and the scripts never print values):
-
-| Name | Needed | What it is |
-|---|---|---|
-| `PORTAL_EMAIL` | yes | your Zoho login email |
-| `PORTAL_PASSWORD` | yes | your Zoho password |
-| `PORTAL_TOTP_SECRET` | yes with `--code-source totp` (the default) | the authenticator setup key |
-| `ZOHO_ORG_ID` | yes | the number after `/app/` in the address bar once signed in |
-| `PW_CHANNEL` | no | `chrome` to use installed Chrome instead of Playwright's Chromium |
-| `PORTAL_REDACT` | no | extra words to hide in failure evidence, comma separated (your name, company, phone) |
-
-Inputs are in `inputs/invoice.json` (customer, invoice_date as dd/mm/yyyy, terms, item, quantity). Change a value there, or pass another file with `--inputs`, and no code changes.
-The manifest (`outputs/manifest-<time>.json`) holds: `inputs`, `login_mode`, `pages_visited`, `stage_timings`, `total_seconds`, `captured_files` (name, size, sha256), `resolver_wins`, `navigation`, `status`, and on failure `failed_stage` and `failure_bundle`.
-
-## One command (setup, checks, tests, run)
-
-First get the code and open a terminal in its folder (needs Git and Python 3.9+):
+Needs Git and Python 3.9+.
 
     git clone https://github.com/laxayk/portal-runner
     cd portal-runner
-
-Without Git, use the repo page's Code > Download ZIP, extract it and open PowerShell in that folder.
 
 Windows PowerShell:
 
@@ -65,71 +29,66 @@ Linux or macOS:
 
     ./scripts/go.sh
 
-The first run installs everything and creates `.env`, then stops and tells you which names to fill in (it never prints values).
-Run it again after filling `.env`. It then runs the tests and the portal. Options: `-SkipTests` / `--skip-tests`, `-FailAt login` / `--fail-at login`
-(forces a failure at that stage and, for the demo, zips the bundle; it only counts as expected if the forced failure at the requested stage produced the bundle), `-Inputs <file>` (use another input JSON, for example `inputs\invoice_changed.json`), `-DeadSession` (Windows script only: keeps a backup of the saved session, overwrites its cookie values so the file still parses but the portal rejects it, runs, then prints the login mode of the run; evaluation only, ordinary runs are unchanged), `-CodeSource` / `--code-source`.
-Fill `.env` with your portal email, password, TOTP secret and `ZOHO_ORG_ID`: sign in to Zoho Invoice and copy the number after `/app/` in the address bar.
-`go.sh` was run on Linux against a fresh clone; `go.ps1` has been run on Windows (see Honest status above).
+The first run installs everything and creates `.env`, then stops and tells you which names to fill in (it never prints values). Run it again after filling `.env`. It runs the tests, then the bot.
 
-Local outputs (`outputs/failure-*/`, failure zips, PDFs, manifests) are git-ignored.
-Failure bundles redact text files. Before the screenshot, the runner also blanks inputs, hides images, and replaces on-page text that matches your login values,
-emails, phone-like numbers, 6-8 digit codes and anything listed in `PORTAL_REDACT` in `.env` (put your name, company name and phone there).
-Tested: an OCR check on a screenshot with canary text. Not covered: names or details that are neither in `PORTAL_REDACT` nor match those patterns, and the downloaded
-PDF, which is never redacted. Treat bundles and PDFs as private and look at a screenshot before sharing it.
+Options: `-SkipTests` / `--skip-tests`, `-FailAt <stage>` / `--fail-at <stage>` (forces a failure to produce an evidence bundle), `-Inputs <file>` (Windows script, another input JSON), `-DeadSession` (Windows script, breaks the saved session first, for the stale-session check), `-CodeSource` / `--code-source totp|relay`.
 
-## Evaluation runs: commands and expected results
+### Environment variables (`.env`, copied from `.env.example`, git-ignored)
 
-Run these from the repo folder in Windows PowerShell, in this order, after `.env` is filled in and `git pull` is done. Each live run signs in to your own Zoho test account and,
-except the failure run, saves one more draft invoice (it never sends an invoice). Every run writes `outputs\manifest-<time>.json`; PDFs and failure bundles are timestamped too, so nothing is overwritten.
-Use `.\scripts\go.ps1` without `-SkipTests` once if you also want the tests run first.
+| Name | Needed | What it is |
+|---|---|---|
+| `PORTAL_EMAIL` | yes | Zoho login email |
+| `PORTAL_PASSWORD` | yes | Zoho password |
+| `PORTAL_TOTP_SECRET` | yes with `totp` (the default) | the authenticator setup key (base32 or an `otpauth://` URI) |
+| `ZOHO_ORG_ID` | yes | the number after `/app/` in the address bar once signed in |
+| `PW_CHANNEL` | no | `chrome` to use installed Chrome instead of Playwright's Chromium |
+| `PORTAL_REDACT` | no | extra words to hide in failure evidence, comma separated (name, company, phone) |
 
-| # | Assignment check | Command | Expected result |
-|---|---|---|---|
-| 1 | No saved state (full login with the automatic code) | `Remove-Item .state\session.json -ErrorAction SilentlyContinue; .\scripts\go.ps1 -SkipTests` | manifest `login_mode: full_login`, a `login` stage in `stage_timings`, `status: success`, one PDF in `outputs\` |
-| 2 | Rerun (session reuse) | `.\scripts\go.ps1 -SkipTests` | `login_mode: session_reused`, no `login` stage, shorter total time, `status: success` |
-| 3 | Corrupt or stale saved state | `.\scripts\go.ps1 -SkipTests -DeadSession` | the saved session is backed up and its cookie values overwritten; the console prints `login_mode=full_login`, `status=success` and how each page was reached |
-| 3b | Unparseable state file (optional, unit-tested only so far) | `Set-Content .state\session.json "{not json"; .\scripts\go.ps1 -SkipTests` | log line `saved state unusable ... will do a full login`, then `login_mode: full_login`, `status: success` |
-| 4 | Changed input | `.\scripts\go.ps1 -SkipTests -Inputs inputs\invoice_changed.json` | manifest `inputs` show 16/10/2026, Due on Receipt, quantity 5; the PDF shows the same, due date 16/10/2026 and a total of 12,500; no code edited |
-| 5 | Mutated HTML, offline | `.\.venv\Scripts\python.exe -m portal_runner resolve-offline --html tests\fixtures\zoho_invoice_form.html --mutate` | JSON with 7 variants (baseline, renamed classes and ids, broken label links, reordered siblings, wrapper div, inside iframe, all combined); every target names a winning strategy, none says `FAILED` |
-| 6 | Broken step (failure bundle) | `.\scripts\go.ps1 -SkipTests -FailAt perform` | 3 attempts with backoff, then `Expected failure at stage perform` and a zip `outputs\failure-perform-<time>.zip` holding URL, stage key, console log, resolver attempts, page HTML and screenshot with secrets redacted; no new draft |
+### Inputs
 
-The redaction covers your login values, emails, phone-like numbers, codes, and organisation and portal names read from the page. Look at a bundle before sharing it.
-On Linux or macOS use `./scripts/go.sh --skip-tests` for runs 1 and 2 (delete `.state/session.json` first for run 1), `./scripts/go.sh --skip-tests --fail-at perform` for run 6,
-and `.venv/bin/python -m portal_runner resolve-offline ...` for run 5; `-DeadSession` and `-Inputs` exist only in `go.ps1`
-(`python -m portal_runner run --inputs inputs/invoice_changed.json` does the changed-input run anywhere).
+`inputs/invoice.json`:
 
-## Sample outputs
+    {"customer": "Acme Test Traders", "invoice_date": "15/10/2026", "terms": "Net 30", "item": "Consulting hour", "quantity": 3}
 
-No run outputs are committed: manifests, PDFs and failure bundles come from a real account and stay out of the public repo. The submission email is meant to attach one successful run manifest
-(the dead-session run: full login, both New and Invoices clicks) and one failure bundle (`-FailAt perform`, checked for the account's email, phone, name and ids). Run the commands above to produce your own.
+Change a value, or pass another file with `--inputs`, and no code changes. `inputs/invoice_changed.json` is a second example.
+
+### Manifest
+
+`inputs`, `login_mode` (`full_login` or `session_reused`), `pages_visited`, `navigation`, `stage_timings`, `total_seconds`, `captured_files` (name, size, sha256), `resolver_wins`, `status`, and on failure `failed_stage` and `failure_bundle`.
+
+## Evaluation runs
+
+Run from the repo folder in Windows PowerShell, in this order, with `.env` filled in. Each live run creates one more draft invoice in the test account, except the failure run. Manifests, PDFs and failure bundles are timestamped, so nothing is overwritten.
+
+| Check | Command | Expected |
+|---|---|---|
+| No saved state | `Remove-Item .state\session.json -ErrorAction SilentlyContinue; .\scripts\go.ps1 -SkipTests` | `login_mode: full_login`, a `login` stage, `status: success`, one PDF in `outputs\` |
+| Run again | `.\scripts\go.ps1 -SkipTests` | `login_mode: session_reused`, no `login` stage, shorter total time, same document |
+| Corrupt saved state | `.\scripts\go.ps1 -SkipTests -DeadSession` | the saved session is backed up and its cookie values overwritten; the run detects it, logs in fully and succeeds; the console prints `login_mode=full_login` |
+| Changed input | `.\scripts\go.ps1 -SkipTests -Inputs inputs\invoice_changed.json` | a different PDF (date 16/10/2026, Due on Receipt, quantity 5, total 12,500), no code edit |
+| Mutated HTML, offline | `.\.venv\Scripts\python.exe -m portal_runner resolve-offline --html tests\fixtures\zoho_invoice_form.html --mutate` | 7 variants (baseline, renamed classes and ids, broken label links, reordered siblings, added wrapper div, inside an iframe, all combined); every target names a winning strategy, none says `FAILED` |
+| Broken step | `.\scripts\go.ps1 -SkipTests -FailAt perform` | 3 attempts with backoff, then `Expected failure at stage perform` and `outputs\failure-perform-<time>.zip` holding the URL, stage key, console log, resolver attempts, page HTML and screenshot, redacted; no new draft |
+
+On Linux or macOS: `./scripts/go.sh --skip-tests` (delete `.state/session.json` first for the no-state run), `./scripts/go.sh --skip-tests --fail-at perform`, `python -m portal_runner run --inputs inputs/invoice_changed.json`, and `.venv/bin/python -m portal_runner resolve-offline ...`.
+
+Tests: `.\.venv\Scripts\python.exe -m pytest -q` (`go.ps1` runs them without `-SkipTests`). On Windows one OCR test skips when tesseract is not installed.
 
 ## Answers
 
-**Note:** the assignment asks for a code obtained without a human typing it. `RelayProvider` is a convenience for local testing and does not meet that. `TotpProvider` is the compliant provider.
+**How the code arrives and what a wrong code does.** `async def get_code(challenge)` has two providers. `TotpProvider` computes the code from the secret in `.env`. This is the one real implementation. `RelayProvider` reads a code dropped into `.state/code.txt` or typed at a prompt; it is for local testing only and does not meet "no human typing". A wrong code is retried once with a fresh `get_code` call. A second failure is final and writes an evidence bundle. The code is wrapped so it never reaches logs.
 
-**How the code arrives, and what a wrong code does.** `async def get_code(challenge)` has two providers. `TotpProvider` computes a code from a seed
-you supply. `RelayProvider` reads a code you drop into `.state/code.txt` (deleted after reading) or types at a prompt. A wrong code is
-retried once with a fresh `get_code` call. A second failure is final and writes an evidence bundle. The code is wrapped so it never reaches logs.
+**How a dead session is detected.** A redirect to the login page is not the only test. After loading the saved state, the bot opens the app home. The session counts as alive only if the host is the app host, the app's own navigation renders, there is no "session expired" text, and the resolver finds the Invoices link. Otherwise the saved state is discarded and the bot does a full login.
 
-**Dead-session detection.** A login redirect is not enough. The session counts as alive only if the app navigation renders, the host is the app host, and there is no
-"session expired" text. If not, the runner discards the state and logs in again by itself.
+**Locator order and why.** Role and name, then label, nearby text, structure (data attributes), then id or class. Accessible names are the most stable across redesigns; ids and classes change most, so they come last. The winning strategy is logged and written to the manifest as `resolver_wins`. The resolver retries its pass until a strategy wins or a 15 s budget runs out, because the portal reveals controls after its scripts run. It runs offline against saved HTML (`resolve-offline`).
 
-**Locator order and why.** Role+name, then label, nearby text, structure (data attributes), then id/class. Accessible names are the most stable
-across redesigns. Ids and classes change most, so they come last. The winning strategy is logged. On the real Zoho HTML with renamed ids and broken
-label links, the structure and nearby-text fallbacks win. A resolve is not one snapshot: portals serve controls hidden and reveal them once their
-scripts run (Zoho's sign-in does this), so the resolver retries the pass until a strategy wins or a 15s budget runs out. Only a target that stays
-unresolvable for the whole budget is reported missing.
+**Quirks handled.** A due date that depends on the payment terms (checked against the terms); custom dropdowns instead of selects; six separate OTP digit boxes with no ids; a PDF produced by a menu action, captured as a download and checked for the `%PDF` header; a preferences dialog and a sidebar that can cover clicks.
 
-**Quirks handled.** Six separate OTP digit boxes with no ids; custom dropdowns instead of selects; a due date that depends on the payment terms (checked against the terms);
-a PDF produced by a menu action, captured by download and checked for the `%PDF` header.
+**What retries.** Timeouts, locator misses and navigation errors retry with bounded exponential backoff. A wrong code retries once. Bad input JSON and a failed second factor do not retry.
 
-**What retries.** Timeouts, locator misses and navigation errors retry with bounded exponential backoff. A wrong code retries once. Bad input JSON and a
-failed second factor do not retry.
+**Failure bundle.** A final failure writes a folder with `url.txt`, `stage.txt`, `error.txt`, `console.log`, `page.html`, `resolver_attempts.json`, `extra.json` (the attempts) and `screenshot.png`. Text files are redacted. Before the screenshot, inputs are blanked and on-page text matching login values, emails, phone-like numbers, codes, `PORTAL_REDACT` words and the organisation and portal names found in the page is replaced. Treat bundles and downloaded PDFs as private: the PDF is never redacted and prints the account's contact details.
 
-**Failure bundle.** Final failures write a redacted bundle: URL, stage key, console log, resolver attempts, page HTML and a screenshot. Text files are redacted; inputs are masked and on-page text matching known values and patterns is replaced before the screenshot. Redaction is tested with canary secrets. A live bundle exposed an organisation name that no pattern covered, which is why names found in the page's own data are now added automatically. Treat bundles as private.
-
-**For 100 portals, change first.** Move the per-portal Targets and the login steps into data files with a shared adapter, and add a recorded-HTML regression suite per portal, so
-a site change shows up in tests before a run fails.
+**What I would change first for a hundred portals.** Move the per-portal targets and login steps into data files with a shared adapter, and add a recorded-HTML regression suite per portal, so a site change shows up in tests before a run fails.
 
 ## Data note
-Zoho pages show the account phone and email. Saved pages in this repo have contact details and ids removed.
+
+`outputs/`, `.state/` and `.env` are git-ignored. The saved pages in `tests/fixtures` have contact details and ids removed.
