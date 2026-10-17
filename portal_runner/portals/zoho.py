@@ -4,6 +4,7 @@ Flow: sign in (email, password, then a 6 digit authenticator code) -> Invoices -
 fill customer, date, payment terms (sets the due date), item (sets the rate), quantity -> Save as Draft
 -> PDF/Print -> PDF (a real download). Drafts only. Nothing is ever sent to a customer.
 """
+import asyncio
 import logging
 import os
 import re
@@ -264,6 +265,48 @@ class ZohoInvoice(Portal):
         await opt.wait_for(state="visible", timeout=8000)
         await opt.click()
 
+    async def _capture_pdf(self, page, click, dest, timeout=30.0):
+        """Click PDF and save the file. Live check (Oct 17): the click fires
+        GET /api/v3/invoices/<id>?accept=pdf and answers 200 application/pdf, with no new tab.
+        Normally the browser reports that as a download. If it is served inline and no download
+        event comes, the response body itself is the PDF, so save that."""
+        loop = asyncio.get_running_loop()
+        got_download = loop.create_future()
+        got_response = loop.create_future()
+
+        def on_download(d):
+            if not got_download.done():
+                got_download.set_result(d)
+
+        def on_response(r):
+            ct = (r.headers.get("content-type") or "").lower()
+            if r.status == 200 and ("accept=pdf" in r.url or "application/pdf" in ct) and not got_response.done():
+                got_response.set_result(r)
+
+        page.on("download", on_download)
+        page.on("response", on_response)
+        try:
+            await click(timeout=10000)
+            done, _ = await asyncio.wait({got_download, got_response}, timeout=timeout, return_when=asyncio.FIRST_COMPLETED)
+            if not done:
+                raise RetryableError("PDF click produced neither a download nor a PDF response")
+            if got_download.done():
+                await (await got_download).save_as(dest)
+                return
+            try:  # the response arrived first: give the download event a moment to follow
+                d = await asyncio.wait_for(asyncio.shield(got_download), timeout=5.0)
+                await d.save_as(dest)
+                return
+            except asyncio.TimeoutError:
+                pass
+            body = await (await got_response).body()
+            with open(dest, "wb") as fh:
+                fh.write(body)
+            log.info("PDF came back inline, saved the response body (no download event)")
+        finally:
+            page.remove_listener("download", on_download)
+            page.remove_listener("response", on_response)
+
     async def perform(self, page, resolver, inputs, out_dir, visit):
         os.makedirs(out_dir, exist_ok=True)
         await page.goto(self.home, wait_until="domcontentloaded")  # page 1
@@ -316,11 +359,9 @@ class ZohoInvoice(Portal):
         await page.get_by_text("DRAFT").locator("visible=true").first.wait_for(timeout=15000)  # ribbon reads "Draft"; match is case-insensitive
 
         await (await resolver.resolve(page, T["pdf_menu"])).click()
-        async with page.expect_download(timeout=30000) as dl:
-            await (await resolver.resolve(page, T["pdf_item"])).click()
-        download = await dl.value
+        pdf_item = await resolver.resolve(page, T["pdf_item"])
         dest = os.path.join(out_dir, "invoice_%s.pdf" % datetime.now().strftime("%Y%m%d_%H%M%S"))
-        await download.save_as(dest)
+        await self._capture_pdf(page, pdf_item.click, dest)
         with open(dest, "rb") as fh:
             if fh.read(5) != b"%PDF-":
                 raise RetryableError("download is not a PDF")
