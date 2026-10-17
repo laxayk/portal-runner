@@ -297,12 +297,28 @@ class ZohoInvoice(Portal):
         except Exception:  # noqa: BLE001
             pass
 
-    async def _pick(self, page, box, text):
+    async def _shown(self, box):
+        """The text a combobox currently shows (its input value, or its label text)."""
+        for read in (box.input_value, box.inner_text):
+            try:
+                v = (await read(timeout=1000)).strip()
+                if v:
+                    return v
+            except Exception:  # noqa: BLE001
+                continue
+        return ""
+
+    async def _pick(self, page, box, text, verify=False):
         """Zoho dropdowns are custom widgets, not <select>. Open, type to filter, click the option.
 
         The option is found as role=option (live DOM: customer, terms and item lists are all
         listbox > option). A loose get_by_text(...).last can land on other text that merely
-        contains the name, such as the customer's details tab or panel, and open it instead."""
+        contains the name, such as the customer's details tab or panel, and open it instead.
+
+        With verify=True the pick must show up in the field. Windows run (Oct 17 23:29): the
+        Net 30 option was highlighted but the field kept 'Due on Receipt', so the due date never
+        followed. If the click did not commit, Enter takes the highlighted match; if that does
+        not commit either, fail with what the field shows."""
         await box.click()
         await page.keyboard.type(text, delay=40)
         opts = page.get_by_role("option").filter(has_text=text).locator("visible=true")
@@ -313,6 +329,18 @@ class ZohoInvoice(Portal):
             opt = page.locator("[role=listbox]").get_by_text(text, exact=False).locator("visible=true").first
             await opt.wait_for(state="visible", timeout=4000)
             await opt.click()
+        if not verify:
+            return
+        for step in ("click", "enter"):
+            for _ in range(6):
+                if text.lower() in (await self._shown(box)).lower():
+                    log.info("picked %r (%s)", text, step)
+                    return
+                await page.wait_for_timeout(250)
+            if step == "click":
+                log.info("click on %r did not commit, pressing Enter", text)
+                await page.keyboard.press("Enter")
+        raise RetryableError("selection did not commit: wanted %r, field shows %r" % (text, await self._shown(box)))
 
     async def _capture_pdf(self, page, click, dest, timeout=30.0):
         """Click PDF and save the file. Live check (Oct 17): the click fires
@@ -385,7 +413,7 @@ class ZohoInvoice(Portal):
         await self._close_customer_panel(page)
         await self._set_date(page, await resolver.resolve(page, T["invoice_date"]), inputs["invoice_date"])
         before_due = await (await resolver.resolve(page, T["due_date"])).input_value()
-        await self._pick(page, await resolver.resolve(page, T["terms"]), inputs["terms"])
+        await self._pick(page, await resolver.resolve(page, T["terms"]), inputs["terms"], verify=True)
         expected = due_date_for(inputs["invoice_date"], inputs["terms"])
         due = await self._wait_due(page, resolver, expected)
         if expected and due != expected:
