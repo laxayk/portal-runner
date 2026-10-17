@@ -168,7 +168,7 @@ def test_screenshot_pixels_hide_text_identity(browser_ctx, tmp_path):
         pytest.skip("tesseract not installed")
     from portal_runner.evidence import mask_page_text
     from portal_runner.redact import Redactor
-    html = ("<body style='font:42px sans-serif'><p>Account kaylacanary@example.com</p><p>Phone 91-8586017706</p>"
+    html = ("<body style='font:42px sans-serif'><p>Account canary@example.com</p><p>Phone 91-9876543210</p>"
             "<p>Org Zebra Canary Traders</p><p>Invoice INV-000001</p></body>")
 
     def ocr(png):
@@ -183,16 +183,16 @@ def test_screenshot_pixels_hide_text_identity(browser_ctx, tmp_path):
             await page.screenshot(path=str(tmp_path / "masked.png"))
     run(go())
     raw, masked = ocr(tmp_path / "raw.png").lower(), ocr(tmp_path / "masked.png").lower()
-    assert "canary" in raw and "8586" in raw  # OCR works on the control
-    assert "canary" not in masked and "8586" not in masked and "example.com" not in masked
+    assert "canary" in raw and "9876" in raw  # OCR works on the control
+    assert "canary" not in masked and "9876" not in masked and "example.com" not in masked
     assert "inv-000001" in masked.replace(" ", "") or "invoice" in masked
 
 
 def test_redactor_masks_phone_and_listed_ids():
     from portal_runner.redact import Redactor
-    r = Redactor(["kaylakshay", "60092053190"])
-    out = r.text('"phone":"91-8586017706","user_name":"kaylakshay","organization_id":"60092053190"')
-    for bad in ("8586017706", "kaylakshay", "60092053190"):
+    r = Redactor(["testuser01", "70011223344"])
+    out = r.text('"phone":"91-9876543210","user_name":"testuser01","organization_id":"70011223344"')
+    for bad in ("9876543210", "testuser01", "70011223344"):
         assert bad not in out
 
 
@@ -207,10 +207,10 @@ def test_child_logger_messages_are_redacted(capsys):
 
 def test_url_keeps_spa_route_but_not_ids_or_tokens():
     from portal_runner.redact import Redactor
-    r = Redactor(["60092053190"])
-    assert r.url("https://invoice.zoho.in/app/60092053190#/invoices/4299035000000040001?x=1") == "https://invoice.zoho.in/app/[REDACTED]#/invoices/[REDACTED]"
+    r = Redactor(["70011223344"])
+    assert r.url("https://invoice.zoho.in/app/70011223344#/invoices/5500000000000000001?x=1") == "https://invoice.zoho.in/app/[REDACTED]#/invoices/[REDACTED]"
     assert r.url("https://x.example/cb?code=abc#access_token=secret") == "https://x.example/cb"
-    assert r.url("https://invoice.zoho.in/app/60092053190#/invoices/new") != r.url("https://invoice.zoho.in/app/60092053190#/invoices")
+    assert r.url("https://invoice.zoho.in/app/70011223344#/invoices/new") != r.url("https://invoice.zoho.in/app/70011223344#/invoices")
 
 
 def test_account_names_in_page_are_learned_and_redacted():

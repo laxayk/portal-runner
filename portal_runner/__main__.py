@@ -11,11 +11,15 @@ from .runner import Config, run
 
 def load_env(path=".env"):
     if os.path.exists(path):
-        for line in open(path):
-            line = line.strip()
-            if line and not line.startswith("#") and "=" in line:
-                k, v = line.split("=", 1)
-                os.environ.setdefault(k.strip(), v.strip())
+        with open(path, encoding="utf-8-sig") as fh:  # utf-8-sig: Windows editors may add a BOM
+            for line in fh:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    k, v = line.split("=", 1)
+                    v = v.strip()
+                    if len(v) >= 2 and v[0] == v[-1] and v[0] in "\"'":
+                        v = v[1:-1]
+                    os.environ.setdefault(k.strip(), v)
 
 
 def build_provider(kind, state_dir):
@@ -30,7 +34,8 @@ def build_provider(kind, state_dir):
 def cmd_run(a):
     load_env()
     from .portals.zoho import ZohoInvoice
-    inputs = json.load(open(a.inputs))
+    with open(a.inputs, encoding="utf-8-sig") as fh:
+        inputs = json.load(fh)
     creds = {"email": os.environ.get("PORTAL_EMAIL", ""), "password": os.environ.get("PORTAL_PASSWORD", ""),
              "totp_secret": os.environ.get("PORTAL_TOTP_SECRET", "")}
     if not creds["email"] or not creds["password"]:
