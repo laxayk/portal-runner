@@ -1,9 +1,11 @@
 """Bounded retries with backoff. Retryable and final failures are kept apart."""
 import asyncio
+import logging
 import random
 import time
 
 from .errors import FinalError, RetryableError, StageFailed
+log = logging.getLogger("portal_runner")
 
 try:
     from playwright.async_api import Error as PlaywrightError
@@ -39,7 +41,10 @@ async def run_stage(name, fn, max_attempts=3, base_delay=0.5, max_delay=8.0, sta
             return result
         except Exception as exc:  # noqa: BLE001
             retry = is_retryable(exc)
-            attempts.append({"n": n, "ok": False, "retryable": retry, "error": exc.__class__.__name__,
+            first = " ".join(str(exc).split())[:300]
+            log.warning("stage %s attempt %d failed (%s, %s): %s", name, n, exc.__class__.__name__,
+                        "will retry" if retry and n < max_attempts else "final", first)
+            attempts.append({"n": n, "ok": False, "retryable": retry, "error": exc.__class__.__name__, "message": first,
                              "seconds": round(time.monotonic() - t0, 3)})
             over_budget = (time.monotonic() - started) >= stage_budget
             if not retry or n == max_attempts or over_budget:
