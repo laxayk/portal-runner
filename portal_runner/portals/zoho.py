@@ -340,15 +340,52 @@ class ZohoInvoice(Portal):
         listbox > option). A loose get_by_text(...).last can land on other text that merely
         contains the name, such as the customer's details tab or panel, and open it instead.
 
-        With verify=True the pick must show up in the field. Windows run (Oct 17 23:29): the
+        With verify=True the pick must show up in the field. Windows runs (Oct 17): the
         Net 30 option was highlighted but the field kept 'Due on Receipt', so the due date never
-        followed. If the click did not commit, Enter takes the highlighted match; if that does
-        not commit either, fail with what the field shows."""
+        followed. If the click did not commit, click the settled option again; if that does not
+        commit either, fail with what the field shows and the event trace."""
         if verify:
             await self._trace_on(page)
         await box.click()
         await page.keyboard.type(text, delay=40)
+        await self._settle_options(page)
         opts = page.get_by_role("option").filter(has_text=text).locator("visible=true")
+        await self._click_option(page, opts, text)
+        if not verify:
+            return
+        for step in ("click", "again"):
+            for _ in range(6):
+                if text.lower() in (await self._shown(box)).lower():
+                    log.info("picked %r (%s)", text, step)
+                    return
+                await page.wait_for_timeout(250)
+            if step == "click":
+                log.info("click on %r did not commit, clicking the settled option again", text)
+                await self._settle_options(page)
+                await self._click_option(page, opts, text)
+        log.warning("pick trace for %r: %s", text, await self._trace_read(page))
+        raise RetryableError("selection did not commit: wanted %r, field shows %r" % (text, await self._shown(box)))
+
+    async def _settle_options(self, page, quiet=0.6, limit=4.0):
+        """Wait until the dropdown list stops changing. Zoho filters the list about 400 ms after the
+        last key (measured live: 8 options became 1 at +393 ms), and a click that lands while the
+        old list is still being replaced does not select. Recorded failure DOM (Oct 17 23:44): list
+        already filtered to 'Net 30', highlighted, aria-selected=false, field unchanged."""
+        loop = asyncio.get_running_loop()
+        end = loop.time() + limit
+        last, since = None, loop.time()
+        while loop.time() < end:
+            try:
+                now = await page.evaluate("() => [...document.querySelectorAll('[role=option]')].filter(e => e.offsetParent).map(e => e.textContent.trim()).join('|')")
+            except Exception:  # noqa: BLE001
+                now = None
+            if now != last:
+                last, since = now, loop.time()
+            elif now and loop.time() - since >= quiet:
+                return
+            await page.wait_for_timeout(120)
+
+    async def _click_option(self, page, opts, text):
         try:
             await opts.first.wait_for(state="visible", timeout=8000)
             await opts.first.click()
@@ -356,19 +393,6 @@ class ZohoInvoice(Portal):
             opt = page.locator("[role=listbox]").get_by_text(text, exact=False).locator("visible=true").first
             await opt.wait_for(state="visible", timeout=4000)
             await opt.click()
-        if not verify:
-            return
-        for step in ("click", "enter"):
-            for _ in range(6):
-                if text.lower() in (await self._shown(box)).lower():
-                    log.info("picked %r (%s)", text, step)
-                    return
-                await page.wait_for_timeout(250)
-            if step == "click":
-                log.info("click on %r did not commit, pressing Enter", text)
-                await page.keyboard.press("Enter")
-        log.warning("pick trace for %r: %s", text, await self._trace_read(page))
-        raise RetryableError("selection did not commit: wanted %r, field shows %r" % (text, await self._shown(box)))
 
     async def _capture_pdf(self, page, click, dest, timeout=30.0):
         """Click PDF and save the file. Live check (Oct 17): the click fires

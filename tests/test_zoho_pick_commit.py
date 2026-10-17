@@ -1,14 +1,23 @@
-"""A terms option that is only highlighted by the click must still end up selected (Windows run, Oct 17)."""
+"""Terms pick. Model of the suspected Windows failure: the list is filtered by a debounce after typing and a click
+before that filter lands does not select. This models the hypothesis; it is not the real Zoho page."""
 import pytest
 from portal_runner.errors import RetryableError
 from portal_runner.portals.zoho import ZohoInvoice
 from conftest import run
 
-def page_html(enter_commits):
-    return ("<html><body><div id='box' tabindex=0 role='combobox' onclick=\"document.getElementById('lb').style.display='block'\">Due on Receipt</div>"
-            "<ul id='lb' role='listbox' style='display:none'><li role='option' style='background:#cde'>Net 30</li></ul>"
-            "<script>document.addEventListener('keydown',function(e){if(e.key==='Enter' && %s){document.getElementById('box').textContent='Net 30'}})</script>"
-            "</body></html>" % ("true" if enter_commits else "false"))
+
+def page_html(commits_when_filtered=True, never=False):
+    return ("<html><body><div id='box' tabindex=0 role='combobox' onclick=\"document.getElementById('s').style.display='block'\">Due on Receipt</div>"
+            "<div id='s' style='display:none'><input id='q' aria-label='Search'><ul id='lb' role='listbox'>"
+            "<li role='option'>Net 15</li><li role='option'>Net 30</li><li role='option'>Net 45</li></ul></div>"
+            "<script>var filtered=false;var t;"
+            "document.getElementById('q').addEventListener('input',function(){filtered=false;clearTimeout(t);t=setTimeout(function(){"
+            "document.getElementById('lb').innerHTML=\"<li role='option'>Net 30</li>\";filtered=true;bind()},450)});"
+            "function bind(){document.querySelectorAll('[role=option]').forEach(function(li){li.onclick=function(){"
+            "if(%s && (filtered || !%s)){document.getElementById('box').textContent=li.textContent}}})}bind();"
+            "document.getElementById('box').addEventListener('click',function(){setTimeout(function(){document.getElementById('q').focus()},0)});"
+            "</script></body></html>" % ("false" if never else "true", "true" if commits_when_filtered else "false"))
+
 
 def _pick(browser_ctx, html):
     async def go():
@@ -19,10 +28,12 @@ def _pick(browser_ctx, html):
             return await page.locator("#box").inner_text()
     return run(go())
 
-def test_enter_commits_when_click_only_highlights(browser_ctx):
-    assert _pick(browser_ctx, page_html(True)) == "Net 30"
+
+def test_pick_waits_for_the_filtered_list_before_clicking(browser_ctx):
+    assert _pick(browser_ctx, page_html()) == "Net 30"
+
 
 def test_uncommitted_pick_fails_with_what_the_field_shows(browser_ctx):
     with pytest.raises(RetryableError) as e:
-        _pick(browser_ctx, page_html(False))
+        _pick(browser_ctx, page_html(never=True))
     assert "Due on Receipt" in str(e.value)
