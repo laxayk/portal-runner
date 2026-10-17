@@ -7,6 +7,7 @@ fill customer, date, payment terms (sets the due date), item (sets the rate), qu
 import logging
 import os
 import re
+import time
 from datetime import datetime, timedelta
 
 from ..errors import FinalError, RetryableError
@@ -37,6 +38,8 @@ T = {
 }
 
 DIGITS = re.compile(r"^\d{6}$")
+TRUST_PROMPT = re.compile(r"trust this browser", re.I)
+OTP_ERROR = re.compile(r"invalid|incorrect|wrong|expired|didn'?t match|does not match", re.I)
 
 
 def due_date_for(invoice_date, terms):
@@ -56,6 +59,7 @@ class ZohoInvoice(Portal):
     def __init__(self, org_id):
         self.org_id = org_id
         self.home = APP % org_id + "#/home"
+        self.verdict_timeout = 30.0  # seconds to wait for a positive verdict after a code submit
 
     # ---- session -------------------------------------------------------------------------------
     async def is_logged_in(self, page, resolver):
@@ -85,37 +89,130 @@ class ZohoInvoice(Portal):
         pw = await resolver.resolve(page, T["password"])
         await pw.fill(creds["password"])
         await (await resolver.resolve(page, T["next"])).click()
-        await page.wait_for_timeout(3000)
-        if "accounts.zoho.in" in page.url and await page.locator("input[type=tel]").count():
+        if await self._challenge_shown(page):
             await self._otp(page, resolver, get_code)
-        await page.wait_for_url(re.compile(r"invoice\.zoho\.in|accounts\.zoho\.in/(home|trustbrowser)"), timeout=30000)
+        await self._wait_for_app(page)
         if not await self.is_logged_in(page, resolver):
             raise FinalError("signed in but the app did not load")
+
+    # ---- post-submit state ---------------------------------------------------------------------
+    # After the password, and again after each code, the page is in exactly one of a few states.
+    # A verdict comes only from positive evidence on the page, never from how long a redirect
+    # takes: a slow redirect is not a wrong code, and a transition is not an acceptance.
+    async def _challenge_shown(self, page, timeout=15.0):
+        """True if the second-factor challenge is up. It can render late, like the login box."""
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if "invoice.zoho.in" in page.url:
+                return False
+            if await page.locator("input[type=tel]").locator("visible=true").count():
+                return True
+            await page.wait_for_timeout(500)
+        return False
+
+    async def _trust_prompt_shown(self, page):
+        try:
+            return await page.get_by_text(TRUST_PROMPT).locator("visible=true").count() > 0
+        except Exception:  # noqa: BLE001
+            return False
+
+    async def _otp_error_shown(self, page):
+        try:
+            return await page.get_by_text(OTP_ERROR).locator("visible=true").count() > 0
+        except Exception:  # noqa: BLE001
+            return False
+
+    async def _otp_state(self, page):
+        """Classify the page after a code submit.
+
+        accepted - positive post-auth evidence only: the app itself, the accounts home, or the
+                   "Trust this browser" prompt (only shown after a code was accepted)
+        rejected - explicit proof only: the challenge is still up AND shows an invalid/expired
+                   code error. Cleared boxes alone prove nothing (sites re-render them).
+        unknown  - anything else: mid-navigation, loading, an error page, boxes filled or
+                   cleared with no verdict. Never typed over and never re-submitted into.
+        """
+        if "invoice.zoho.in" in page.url or re.search(r"accounts\.zoho\.in/home", page.url):
+            return "accepted"
+        if await self._trust_prompt_shown(page):
+            return "accepted"
+        if not await page.locator("input[type=tel]").count():
+            return "unknown"  # no challenge on screen: transition, loading or an error page
+        if await self._otp_error_shown(page):
+            return "rejected"
+        return "unknown"
+
+    async def _click_verify(self, page):
+        btn = page.locator("#totpverifybtn, #nextbtn, button:has-text('Verify')").locator("visible=true")
+        if await btn.count():
+            await btn.first.click()
+            return True
+        log.warning("no verify button found on the second factor page")
+        return False
+
+    async def _await_verdict(self, page, verdict_timeout=None):
+        """Poll until the portal positively accepts or explicitly rejects the code.
+
+        An unknown state is never resolved by typing another code or clicking verify again:
+        the first submit may still be processing, and a duplicate can confuse the portal.
+        If no verdict arrives in time the whole login stage is retried fresh instead.
+        """
+        timeout = self.verdict_timeout if verdict_timeout is None else verdict_timeout
+        deadline = time.monotonic() + timeout
+        while True:
+            state = await self._otp_state(page)
+            if state == "accepted":
+                return "accepted"
+            if state == "rejected":
+                log.warning("portal reported the code wrong (error shown on the challenge)")
+                return "rejected"
+            if time.monotonic() > deadline:
+                raise RetryableError("no verdict after the code submit; the page state stayed unknown")
+            await page.wait_for_timeout(500)
+
+    async def _dismiss_trust_prompt(self, page):
+        """Decline the 180 day trust offer: the run relies on its own saved session only."""
+        try:
+            await page.get_by_role("button", name=re.compile(r"not now", re.I)).first.click(timeout=1500)
+            log.info("trust-browser prompt declined (Not now)")
+            return True
+        except Exception:  # noqa: BLE001
+            return False
+
+    async def _wait_for_app(self, page, timeout=45.0):
+        """Reach a signed-in destination after credentials, declining the trust prompt if shown."""
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if "invoice.zoho.in" in page.url or re.search(r"accounts\.zoho\.in/home", page.url):
+                return
+            if await self._trust_prompt_shown(page):
+                await self._dismiss_trust_prompt(page)
+            await page.wait_for_timeout(500)
+        raise RetryableError("signed in but never reached the app")
 
     async def _otp(self, page, resolver, get_code):
         async def submit(code):
             if not DIGITS.match(code):
                 raise FinalError("code is not 6 digits")
+            if await self._otp_state(page) == "accepted":
+                log.info("second factor already accepted; not typing another code")
+                return
+            boxes = page.locator("input[type=tel]")
+            n = await boxes.count()
+            if not n:
+                raise RetryableError("second factor challenge not on screen; not typing into an unknown page")
+            await boxes.nth(n - 1).click()  # clear leftover digits (retry after an explicit error)
+            for _ in range(n):
+                await page.keyboard.press("Backspace")
             first = await resolver.resolve(page, T["otp_box"])
             await first.click()
             await page.keyboard.type(code, delay=60)  # six separate boxes advance on each key
-            btn = page.locator("#totpverifybtn, #nextbtn").locator("visible=true")
-            if await btn.count():
-                await btn.first.click()
+            await self._click_verify(page)
 
         async def rejected():
-            try:
-                await page.wait_for_url(re.compile(r"invoice\.zoho\.in|trustbrowser|accounts\.zoho\.in/home"), timeout=9000)
-                return False
-            except Exception:  # noqa: BLE001
-                return True
+            return (await self._await_verdict(page)) == "rejected"
 
         await second_factor(self.name, get_code, submit, rejected)
-        # "Trust this browser" prompt, if shown: decline, so the session is the only thing we rely on.
-        try:
-            await page.get_by_role("button", name=re.compile("Skip|Not now|No", re.I)).first.click(timeout=2500)
-        except Exception:  # noqa: BLE001
-            pass
 
     # ---- work ----------------------------------------------------------------------------------
     async def _pick(self, page, box, text):
