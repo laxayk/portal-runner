@@ -64,6 +64,7 @@ class ZohoInvoice(Portal):
         self.org_id = org_id
         self.home = APP % org_id + "#/home"
         self.nav_notes = {}  # how each page was reached; copied into the manifest
+        self._draft_url = None  # set once the draft is saved, so a retry never saves a second one
         self.verdict_timeout = 30.0  # seconds to wait for a positive verdict after a code submit
 
     # ---- session -------------------------------------------------------------------------------
@@ -460,8 +461,34 @@ class ZohoInvoice(Portal):
         log.info("new invoice form: %s", how)
 
     async def perform(self, page, resolver, inputs, out_dir, visit):
+        """Create the draft once, then capture the PDF. A retry after the draft was saved reopens
+        that draft and only repeats what failed, so the account never gets a second invoice."""
         os.makedirs(out_dir, exist_ok=True)
-        self.nav_notes.clear()
+        if self._draft_url:
+            log.info("draft already saved; reopening it instead of creating another")
+            await page.goto(self._draft_url, wait_until="domcontentloaded")
+            visit(page.url)
+        else:
+            self.nav_notes.clear()
+            self._draft_url = await self._create_draft(page, resolver, inputs, visit)
+        await page.get_by_text("DRAFT").locator("visible=true").first.wait_for(timeout=15000)  # ribbon reads "Draft"; match is case-insensitive
+        return [await self._download_pdf(page, resolver, out_dir)]
+
+    async def _save_draft(self, page, resolver, visit):
+        """Click Save as Draft and return the saved invoice's address. Once the click is made the
+        outcome may be unknown (the save can land even if the page is slow), so any failure here is
+        final: retrying could create a second draft."""
+        button = await resolver.resolve(page, T["save_draft"])
+        try:
+            await button.click()
+            await page.wait_for_url(re.compile(r"#/invoices/\d+"), timeout=20000)  # page 4: the saved draft
+        except Exception as exc:  # noqa: BLE001
+            raise FinalError("Save as Draft was clicked but the saved invoice was not confirmed (%s); not retrying, "
+                             "to avoid a duplicate draft. Check the invoice list in Zoho." % exc.__class__.__name__) from exc
+        visit(page.url)
+        return page.url
+
+    async def _create_draft(self, page, resolver, inputs, visit):
         await page.goto(self.home, wait_until="domcontentloaded")  # page 1
         nav = await resolver.resolve(page, T["nav_invoices"])  # page 2: list
         try:
@@ -508,11 +535,9 @@ class ZohoInvoice(Portal):
         await qty.fill(str(inputs["quantity"]))
         await page.keyboard.press("Tab")
 
-        await (await resolver.resolve(page, T["save_draft"])).click()
-        await page.wait_for_url(re.compile(r"#/invoices/\d+"), timeout=20000)  # page 4: the saved draft
-        visit(page.url)
-        await page.get_by_text("DRAFT").locator("visible=true").first.wait_for(timeout=15000)  # ribbon reads "Draft"; match is case-insensitive
+        return await self._save_draft(page, resolver, visit)
 
+    async def _download_pdf(self, page, resolver, out_dir):
         await (await resolver.resolve(page, T["pdf_menu"])).click()
         pdf_item = await resolver.resolve(page, T["pdf_item"])
         dest = os.path.join(out_dir, "invoice_%s.pdf" % datetime.now().strftime("%Y%m%d_%H%M%S"))
@@ -520,4 +545,4 @@ class ZohoInvoice(Portal):
         with open(dest, "rb") as fh:
             if fh.read(5) != b"%PDF-":
                 raise RetryableError("download is not a PDF")
-        return [dest]
+        return dest
